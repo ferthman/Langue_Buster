@@ -1,5 +1,8 @@
 import {
   authResponseSchema,
+  reviewAnswerRequestSchema,
+  reviewAnswerResponseSchema,
+  reviewQueueResponseSchema,
   runAnswerRequestSchema,
   runAnswerResponseSchema,
   runFinishResponseSchema,
@@ -46,6 +49,15 @@ export const runApiSurface = {
   resultResponse: runResultResponseSchema,
 } as const;
 
+export const reviewApiSurface = {
+  queueRoute: 'GET /review/queue',
+  queueResponse: reviewQueueResponseSchema,
+  answerRoute: 'POST /review/answer',
+  answerRequest: reviewAnswerRequestSchema,
+  answerResponse: reviewAnswerResponseSchema,
+} as const;
+
 export { createAuthModule };
 export { createAuthModuleFromEnvironment, createApiRequestHandler, createApiServer, startApiServer };
 export * from './runs/index.js';
+export * from './mastery/index.js';

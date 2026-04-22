@@ -248,8 +248,76 @@ export const runResultSchema = z.object({
   startedAt: z.string().datetime(),
   finishedAt: z.string().datetime(),
   durationMs: z.number().int().nonnegative(),
+  masteryAppliedAt: z.string().datetime().optional(),
 });
 export type RunResult = z.infer<typeof runResultSchema>;
+
+export const masteryStateSchema = z.enum(['new', 'learning', 'weak', 'stable', 'mastered']);
+export type MasteryState = z.infer<typeof masteryStateSchema>;
+
+export const reviewResurfacingReasonSchema = z.enum([
+  'new_item',
+  'recent_failure',
+  'weak_item',
+  'scheduled_review',
+  'streak_recovery',
+]);
+export type ReviewResurfacingReason = z.infer<typeof reviewResurfacingReasonSchema>;
+
+export const masteryOutcomeSchema = z.enum(['correct', 'wrong']);
+export type MasteryOutcome = z.infer<typeof masteryOutcomeSchema>;
+
+export const userMasterySchema = z.object({
+  userId: z.string().trim().min(1),
+  sourceItemId: z.string().trim().min(1),
+  cefrLevel: cefrLevelSchema,
+  masteryState: masteryStateSchema,
+  seenCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+  wrongCount: z.number().int().nonnegative(),
+  successStreak: z.number().int().nonnegative(),
+  failureStreak: z.number().int().nonnegative(),
+  lastSeenAt: z.string().datetime(),
+  lastOutcome: masteryOutcomeSchema,
+  lastTimingMs: z.number().int().nonnegative().optional(),
+  averageTimingMs: z.number().int().nonnegative().optional(),
+  nextReviewAt: z.string().datetime(),
+  resurfacingReason: reviewResurfacingReasonSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type UserMastery = z.infer<typeof userMasterySchema>;
+
+export const reviewQueueItemSchema = z.object({
+  userId: z.string().trim().min(1),
+  sourceItemId: z.string().trim().min(1),
+  cefrLevel: cefrLevelSchema,
+  masteryState: masteryStateSchema,
+  nextReviewAt: z.string().datetime(),
+  priority: z.number().int().nonnegative(),
+  reason: reviewResurfacingReasonSchema,
+  topicId: z.string().trim().min(1).optional(),
+  question: generatedQuestionSchema.optional(),
+  lastSeenAt: z.string().datetime().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ReviewQueueItem = z.infer<typeof reviewQueueItemSchema>;
+
+export const reviewAnswerEventSchema = z.object({
+  id: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
+  sourceItemId: z.string().trim().min(1),
+  questionId: z.string().trim().min(1),
+  selectedOptionId: z.string().trim().min(1),
+  correctOptionId: z.string().trim().min(1),
+  correctness: z.boolean(),
+  timingMs: z.number().int().nonnegative().optional(),
+  masteryStateBefore: masteryStateSchema,
+  masteryStateAfter: masteryStateSchema,
+  occurredAt: z.string().datetime(),
+});
+export type ReviewAnswerEvent = z.infer<typeof reviewAnswerEventSchema>;
 
 export const launchLevelSchema = z.enum(launchLevels);
 export type LaunchLevelId = z.infer<typeof launchLevelSchema>;
@@ -307,6 +375,34 @@ export const runResultResponseSchema = z.object({
 });
 export type RunResultResponse = z.infer<typeof runResultResponseSchema>;
 
+export const reviewQueueQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  levelId: launchLevelSchema.optional(),
+  direction: answerDirectionSchema.default('ru_to_fr'),
+});
+export type ReviewQueueQuery = z.infer<typeof reviewQueueQuerySchema>;
+
+export const reviewQueueResponseSchema = z.object({
+  items: z.array(reviewQueueItemSchema),
+});
+export type ReviewQueueResponse = z.infer<typeof reviewQueueResponseSchema>;
+
+export const reviewAnswerRequestSchema = z.object({
+  sourceItemId: z.string().trim().min(1),
+  questionId: z.string().trim().min(1),
+  selectedOptionId: z.string().trim().min(1),
+  answeredAt: z.string().datetime().optional(),
+  direction: answerDirectionSchema.default('ru_to_fr'),
+});
+export type ReviewAnswerRequest = z.infer<typeof reviewAnswerRequestSchema>;
+
+export const reviewAnswerResponseSchema = z.object({
+  evaluation: answerEvaluationSchema,
+  mastery: userMasterySchema,
+  reviewQueueItem: reviewQueueItemSchema,
+});
+export type ReviewAnswerResponse = z.infer<typeof reviewAnswerResponseSchema>;
+
 export const runErrorCodeSchema = z.enum([
   'run_not_found',
   'run_forbidden',
@@ -324,3 +420,17 @@ export const runErrorSchema = z.object({
   message: z.string().min(1),
 });
 export type RunError = z.infer<typeof runErrorSchema>;
+
+export const reviewErrorCodeSchema = z.enum([
+  'review_item_not_found',
+  'review_question_mismatch',
+  'review_invalid_answer',
+  'review_unavailable',
+]);
+export type ReviewErrorCode = z.infer<typeof reviewErrorCodeSchema>;
+
+export const reviewErrorSchema = z.object({
+  code: reviewErrorCodeSchema,
+  message: z.string().min(1),
+});
+export type ReviewError = z.infer<typeof reviewErrorSchema>;

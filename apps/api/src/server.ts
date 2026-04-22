@@ -10,8 +10,12 @@ import { AuthDomainError } from './auth/errors.js';
 import type { DatabaseClient } from './db/client.js';
 import { createDatabaseRuntime, resolveDatabaseConnectionString } from './db/runtime.js';
 import { readJsonBody, sendJson } from './http.js';
+import { createMasteryModule } from './mastery/index.js';
+import { createUnavailableMasteryController, type MasteryController } from './mastery/controller.js';
+import { createRunContentRepository } from './runs/content.js';
 import { createRunModule } from './runs/index.js';
 import { createUnavailableRunController, type RunController } from './runs/controller.js';
+import { PostgresAnswerEventRepository, PostgresRunResultRepository } from './runs/repositories.js';
 
 type CreateApiServerOptions = {
   env: Record<string, string | undefined>;
@@ -47,6 +51,7 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
     await routeRequest(request, response, {
       authController: modules.authController,
       runController: modules.runController,
+      masteryController: modules.masteryController,
       authConfigured,
     }).catch(() => {
       sendJson(response, 500, {
@@ -71,6 +76,7 @@ function createApiModules(
 ): {
   authController: AuthController;
   runController: RunController;
+  masteryController: MasteryController;
 } {
   try {
     const authRepositories = createPostgresAuthRepositories(client, {
@@ -84,22 +90,38 @@ function createApiModules(
       sessionTtlSeconds: options.sessionTtlSeconds,
       maxAuthAgeSeconds: options.maxAuthAgeSeconds,
     });
+    const runRepositories = {
+      answerEventRepository: new PostgresAnswerEventRepository(client),
+      runResultRepository: new PostgresRunResultRepository(client),
+    };
+    const contentRepository = createRunContentRepository();
+    const masteryModule = createMasteryModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      answerEventRepository: runRepositories.answerEventRepository,
+      runResultRepository: runRepositories.runResultRepository,
+      contentRepository,
+      now: options.now,
+    });
     const runModule = createRunModule({
       client,
       sessionVerifier: authModule.sessionVerifier,
       now: options.now,
       seedGenerator: options.seedGenerator,
+      masteryUpdater: masteryModule.service,
     });
 
     return {
       authController: authModule.controller,
       runController: runModule.controller,
+      masteryController: masteryModule.controller,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'API runtime is unavailable.';
     return {
       authController: createUnavailableAuthController(message),
       runController: createUnavailableRunController(message),
+      masteryController: createUnavailableMasteryController(message),
     };
   }
 }
@@ -110,6 +132,7 @@ async function routeRequest(
   options: {
     authController: AuthController;
     runController: RunController;
+    masteryController: MasteryController;
     authConfigured: boolean;
   },
 ) {
@@ -134,6 +157,8 @@ async function routeRequest(
         runFinish: 'POST /runs/:runId/finish',
         runState: 'GET /runs/:runId',
         runResult: 'GET /runs/:runId/result',
+        reviewQueue: 'GET /review/queue',
+        reviewAnswer: 'POST /review/answer',
       },
     });
     return;
@@ -155,6 +180,22 @@ async function routeRequest(
   if (method === 'POST' && url.pathname === '/runs/start') {
     const body = await readJsonBody(request);
     const result = await options.runController.handleStart(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/review/queue') {
+    const result = await options.masteryController.handleGetQueue(
+      Object.fromEntries(url.searchParams.entries()),
+      authorizationHeader,
+    );
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/review/answer') {
+    const body = await readJsonBody(request);
+    const result = await options.masteryController.handleAnswer(body, authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }

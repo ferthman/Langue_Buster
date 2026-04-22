@@ -42,6 +42,9 @@ type RunServiceDependencies = {
   contentRepository: RunContentRepository;
   now?: () => Date;
   seedGenerator?: () => number;
+  masteryUpdater?: {
+    applyRunMastery(runId: string): Promise<unknown>;
+  };
 };
 
 export type RunService = ReturnType<typeof createRunService>;
@@ -112,7 +115,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         throw new RunDomainError('run_result_unavailable', 'Run result has not been persisted yet.');
       }
 
-      return existing;
+      return ensureMasteryApplied(runId, existing, dependencies);
     },
 
     async submitAnswer(input: {
@@ -196,7 +199,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
           },
           finishedAt: occurredAt,
         });
-        const result = await finalizeRunInternal(finishedRun, dependencies, now);
+        const result = await finalizeRunWithMastery(finishedRun, dependencies, now);
 
         return {
           run: finishedRun,
@@ -291,7 +294,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
           currentQuestionState: null,
           finishedAt: occurredAt,
         });
-        const result = await finalizeRunInternal(finishedRun, dependencies, now);
+        const result = await finalizeRunWithMastery(finishedRun, dependencies, now);
 
         return {
           run: finishedRun,
@@ -324,7 +327,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
     async finishRun(input: { runId: string; userId: string }): Promise<{ run: RunSession; result: RunResult }> {
       const run = await requireOwnedRun(input.runId, input.userId, dependencies.runSessionRepository);
       if (isTerminalStatus(run.status)) {
-        const result = await finalizeRunInternal(run, dependencies, now);
+        const result = await finalizeRunWithMastery(run, dependencies, now);
         return {
           run,
           result,
@@ -337,7 +340,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         status: 'abandoned',
         finishedAt,
       });
-      const result = await finalizeRunInternal(terminalRun, dependencies, now);
+      const result = await finalizeRunWithMastery(terminalRun, dependencies, now);
 
       return {
         run: terminalRun,
@@ -413,6 +416,31 @@ async function finalizeRunInternal(
   });
 
   return dependencies.runResultRepository.save(result);
+}
+
+async function finalizeRunWithMastery(
+  run: RunSession,
+  dependencies: Pick<
+    RunServiceDependencies,
+    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'masteryUpdater'
+  >,
+  now: () => Date,
+): Promise<RunResult> {
+  const result = await finalizeRunInternal(run, dependencies, now);
+  return ensureMasteryApplied(run.id, result, dependencies);
+}
+
+async function ensureMasteryApplied(
+  runId: string,
+  result: RunResult,
+  dependencies: Pick<RunServiceDependencies, 'masteryUpdater' | 'runResultRepository'>,
+): Promise<RunResult> {
+  if (!dependencies.masteryUpdater) {
+    return result;
+  }
+
+  await dependencies.masteryUpdater.applyRunMastery(runId);
+  return (await dependencies.runResultRepository.findByRunId(runId)) ?? result;
 }
 
 function isTerminalStatus(status: RunSession['status']): boolean {

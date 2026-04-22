@@ -34,6 +34,7 @@ export type MoveEventRepository = {
 export type RunResultRepository = {
   save(result: RunResult): Promise<RunResult>;
   findByRunId(runId: string): Promise<RunResult | null>;
+  markMasteryApplied(runId: string, occurredAt: string): Promise<RunResult>;
 };
 
 type RunSessionRow = {
@@ -99,6 +100,7 @@ type RunResultRow = {
   started_at: string;
   finished_at: string;
   duration_ms: number;
+  mastery_applied_at: string | null;
 };
 
 export class PostgresRunSessionRepository implements RunSessionRepository {
@@ -307,7 +309,8 @@ export class PostgresRunResultRepository implements RunResultRepository {
           wrong_count = EXCLUDED.wrong_count,
           started_at = EXCLUDED.started_at,
           finished_at = EXCLUDED.finished_at,
-          duration_ms = EXCLUDED.duration_ms
+          duration_ms = EXCLUDED.duration_ms,
+          mastery_applied_at = EXCLUDED.mastery_applied_at
         RETURNING *
       `,
       [
@@ -323,6 +326,7 @@ export class PostgresRunResultRepository implements RunResultRepository {
         parsed.startedAt,
         parsed.finishedAt,
         parsed.durationMs,
+        parsed.masteryAppliedAt ?? null,
       ],
     );
 
@@ -340,6 +344,25 @@ export class PostgresRunResultRepository implements RunResultRepository {
       [runId],
     );
     return row ? mapRunResultRow(row) : null;
+  }
+
+  async markMasteryApplied(runId: string, occurredAt: string): Promise<RunResult> {
+    const row = await queryOne<RunResultRow>(
+      this.#client,
+      `
+        UPDATE run_results
+        SET mastery_applied_at = $2
+        WHERE run_id = $1
+        RETURNING *
+      `,
+      [runId, occurredAt],
+    );
+
+    if (!row) {
+      throw new Error('Expected run result mastery update to return a row.');
+    }
+
+    return mapRunResultRow(row);
   }
 }
 
@@ -417,5 +440,6 @@ function mapRunResultRow(row: RunResultRow): RunResult {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     durationMs: row.duration_ms,
+    masteryAppliedAt: row.mastery_applied_at ?? undefined,
   });
 }

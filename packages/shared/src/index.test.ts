@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   launchLevels,
+  reviewQueueItemSchema,
   runResultSchema,
   runSessionSchema,
   runStartRequestSchema,
+  userMasterySchema,
 } from './index.js';
 
 describe('shared domain contracts', () => {
@@ -99,6 +101,46 @@ describe('shared domain contracts', () => {
         startedAt: '2026-04-22T00:00:00.000Z',
         finishedAt: '2026-04-22T00:01:00.000Z',
         durationMs: 60_000,
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates mastery and review queue payloads', () => {
+    expect(() =>
+      userMasterySchema.parse({
+        userId: 'usr_1',
+        sourceItemId: 'vocab.apple',
+        cefrLevel: 'A1',
+        masteryState: 'learning',
+        seenCount: 1,
+        correctCount: 1,
+        wrongCount: 0,
+        successStreak: 1,
+        failureStreak: 0,
+        lastSeenAt: '2026-04-22T00:00:00.000Z',
+        lastOutcome: 'correct',
+        lastTimingMs: 1200,
+        averageTimingMs: 1200,
+        nextReviewAt: '2026-04-22T12:00:00.000Z',
+        resurfacingReason: 'new_item',
+        createdAt: '2026-04-22T00:00:00.000Z',
+        updatedAt: '2026-04-22T00:00:00.000Z',
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      reviewQueueItemSchema.parse({
+        userId: 'usr_1',
+        sourceItemId: 'vocab.apple',
+        cefrLevel: 'A1',
+        masteryState: 'weak',
+        nextReviewAt: '2026-04-22T02:00:00.000Z',
+        priority: 110,
+        reason: 'recent_failure',
+        topicId: 'topic.food',
+        lastSeenAt: '2026-04-22T00:00:00.000Z',
+        createdAt: '2026-04-22T00:00:00.000Z',
+        updatedAt: '2026-04-22T00:00:00.000Z',
       }),
     ).not.toThrow();
   });

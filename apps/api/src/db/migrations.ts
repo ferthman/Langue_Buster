@@ -89,8 +89,49 @@ const phase7SchemaStatements = [
       wrong_count INTEGER NOT NULL,
       started_at TEXT NOT NULL,
       finished_at TEXT NOT NULL,
-      duration_ms INTEGER NOT NULL
+      duration_ms INTEGER NOT NULL,
+      mastery_applied_at TEXT
     )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS user_mastery (
+      user_id TEXT NOT NULL REFERENCES users (id),
+      source_item_id TEXT NOT NULL,
+      cefr_level TEXT NOT NULL,
+      mastery_state TEXT NOT NULL,
+      seen_count INTEGER NOT NULL,
+      correct_count INTEGER NOT NULL,
+      wrong_count INTEGER NOT NULL,
+      success_streak INTEGER NOT NULL,
+      failure_streak INTEGER NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      last_outcome TEXT NOT NULL,
+      last_timing_ms INTEGER,
+      average_timing_ms INTEGER,
+      next_review_at TEXT NOT NULL,
+      resurfacing_reason TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, source_item_id)
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS review_answer_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users (id),
+      source_item_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      selected_option_id TEXT NOT NULL,
+      correct_option_id TEXT NOT NULL,
+      correctness BOOLEAN NOT NULL,
+      timing_ms INTEGER,
+      mastery_state_before TEXT NOT NULL,
+      mastery_state_after TEXT NOT NULL,
+      occurred_at TEXT NOT NULL
+    )
+  `,
+  `
+    ALTER TABLE run_results ADD COLUMN IF NOT EXISTS mastery_applied_at TEXT
   `,
 ] as const;
 

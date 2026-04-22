@@ -10,6 +10,9 @@ type CreateRunModuleOptions = {
   sessionVerifier: SessionVerifier;
   now?: () => Date;
   seedGenerator?: () => number;
+  masteryUpdater?: {
+    applyRunMastery(runId: string): Promise<unknown>;
+  };
 };
 
 export function createRunModule(options: CreateRunModuleOptions) {
@@ -25,6 +28,7 @@ export function createRunModule(options: CreateRunModuleOptions) {
     contentRepository,
     now: options.now,
     seedGenerator: options.seedGenerator,
+    masteryUpdater: options.masteryUpdater,
   });
 
   return {

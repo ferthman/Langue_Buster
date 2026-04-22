@@ -19,6 +19,16 @@ const seedBundles = new Map<CefrLevelId, SeedBundle>([
 ]);
 
 export function createRunContentRepository() {
+  const itemIndex = new Map<string, VocabItem>();
+  const distractorIndex = new Map<CefrLevelId, readonly DistractorSet[]>();
+
+  for (const [levelId, bundle] of seedBundles.entries()) {
+    distractorIndex.set(levelId, bundle.distractorSets);
+    for (const item of bundle.vocabItems) {
+      itemIndex.set(item.id, item);
+    }
+  }
+
   return {
     getLevelBundle(levelId: CefrLevelId): SeedBundle {
       const bundle = seedBundles.get(levelId);
@@ -27,6 +37,27 @@ export function createRunContentRepository() {
       }
 
       return bundle;
+    },
+
+    findItemById(sourceItemId: string): VocabItem | null {
+      return itemIndex.get(sourceItemId) ?? null;
+    },
+
+    getBundleForItem(sourceItemId: string): SeedBundle | null {
+      const item = itemIndex.get(sourceItemId);
+      if (!item) {
+        return null;
+      }
+
+      return seedBundles.get(item.cefrLevel) ?? null;
+    },
+
+    listItemsByLevel(levelId: CefrLevelId): readonly VocabItem[] {
+      return this.getLevelBundle(levelId).vocabItems;
+    },
+
+    listDistractorSetsByLevel(levelId: CefrLevelId): readonly DistractorSet[] {
+      return distractorIndex.get(levelId) ?? [];
     },
   };
 }

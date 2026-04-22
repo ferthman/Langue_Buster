@@ -62,6 +62,8 @@ describe('mounted auth and run routes', () => {
         runFinish: 'POST /runs/:runId/finish',
         runState: 'GET /runs/:runId',
         runResult: 'GET /runs/:runId/result',
+        reviewQueue: 'GET /review/queue',
+        reviewAnswer: 'POST /review/answer',
       },
     });
   });
@@ -315,6 +317,104 @@ describe('mounted auth and run routes', () => {
     const result = (resultResponse.body as { result: { status: string; finalScore: number } }).result;
     expect(result.status).toBe('abandoned');
     expect(result.finalScore).toBe(0);
+  });
+
+  it('updates mastery at run end and exposes a backend review queue', async () => {
+    const handler = createHandler();
+    const token = getToken((await authenticate(handler, '123456')).body);
+    const run = await startRun(handler, token);
+
+    await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: run.currentQuestionState.question.correctOptionId,
+      },
+    });
+    await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/finish`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    const queue = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/review/queue?limit=5&levelId=A1',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(queue.status).toBe(200);
+    const firstItem = (queue.body as {
+      items: Array<{ sourceItemId: string; masteryState: string; question?: { id: string } }>;
+    }).items[0];
+    expect(firstItem?.sourceItemId).toBeDefined();
+    expect(firstItem?.masteryState).toBe('learning');
+    expect(firstItem?.question?.id).toBeDefined();
+  });
+
+  it('accepts review answers and returns updated mastery state', async () => {
+    const handler = createHandler();
+    const token = getToken((await authenticate(handler, '123456')).body);
+    const run = await startRun(handler, token);
+
+    await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: run.currentQuestionState.question.correctOptionId,
+      },
+    });
+    await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/finish`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    const queue = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/review/queue?limit=5&levelId=A1',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    const item = (queue.body as {
+      items: Array<{
+        sourceItemId: string;
+        question: { id: string; correctOptionId: string };
+      }>;
+    }).items[0];
+    if (!item) {
+      throw new Error('Expected a review queue item.');
+    }
+
+    const reviewAnswer = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/review/answer',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        sourceItemId: item.sourceItemId,
+        questionId: item.question.id,
+        selectedOptionId: item.question.correctOptionId,
+      },
+    });
+
+    expect(reviewAnswer.status).toBe(200);
+    expect((reviewAnswer.body as { mastery: { masteryState: string } }).mastery.masteryState).toBe('learning');
+    expect((reviewAnswer.body as { reviewQueueItem: { priority: number } }).reviewQueueItem.priority).toBeGreaterThan(0);
   });
 
   it('keeps auth/session data and run data available across repeated requests on the same persisted backend', async () => {
