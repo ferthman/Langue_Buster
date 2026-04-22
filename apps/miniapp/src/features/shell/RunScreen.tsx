@@ -1,13 +1,19 @@
 import {
-  classicRunDefaults,
+  CLASSIC_BOARD_SIZE,
   createEmptyBoard,
-  type GameBoardState,
+  type BoardCellState,
+  type BoardState,
 } from '@langue-buster/game-engine';
 import { createQuestionCardPreview } from '@langue-buster/content-core';
 import { appEvents } from '@langue-buster/analytics';
 import { Link } from 'react-router-dom';
 
-const boardState: GameBoardState = createEmptyBoard(classicRunDefaults.boardSize);
+const CLASSIC_RUN_HEARTS = 3;
+
+const boardState: BoardState = createEmptyBoard({
+  width: CLASSIC_BOARD_SIZE,
+  height: CLASSIC_BOARD_SIZE,
+});
 const demoCard = createQuestionCardPreview({
   cefrLevel: 'A1',
   promptLanguage: 'ru',
@@ -24,7 +30,7 @@ export function RunScreen() {
         </div>
         <div>
           <span className="metric-label">Сердца</span>
-          <strong>{classicRunDefaults.hearts}</strong>
+          <strong>{CLASSIC_RUN_HEARTS}</strong>
         </div>
         <div>
           <span className="metric-label">Серия</span>
@@ -46,13 +52,13 @@ export function RunScreen() {
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Поле {boardState.size}x{boardState.size}</h2>
+          <h2>Поле {boardState.width}x{boardState.height}</h2>
           <span>{appEvents.runStarted}</span>
         </div>
-        <div className="board-grid" style={{ gridTemplateColumns: `repeat(${boardState.size}, 1fr)` }}>
-          {boardState.cells.map((cell) => (
-            <div key={cell.id} className="board-cell">
-              {cell.occupied ? '■' : ''}
+        <div className="board-grid" style={{ gridTemplateColumns: `repeat(${boardState.width}, 1fr)` }}>
+          {boardState.cells.map((cell: BoardCellState, index) => (
+            <div key={index} className="board-cell">
+              {cell === 'filled' ? '■' : ''}
             </div>
           ))}
         </div>
@@ -73,4 +79,3 @@ export function RunScreen() {
     </main>
   );
 }
-
