@@ -5,10 +5,12 @@
   "packageManager": "pnpm@10.10.0",
   "scripts": {
     "build": "corepack pnpm -r build",
+    "build:api": "corepack pnpm --filter @langue-buster/api... build",
     "dev:miniapp": "corepack pnpm --filter @langue-buster/miniapp dev",
     "dev:admin": "corepack pnpm --filter @langue-buster/admin dev",
     "dev:api": "corepack pnpm --filter @langue-buster/api dev",
     "lint": "corepack pnpm -r lint",
+    "start:api": "corepack pnpm --filter @langue-buster/api start",
     "test": "corepack pnpm -r test",
     "typecheck": "corepack pnpm -r typecheck"
   },

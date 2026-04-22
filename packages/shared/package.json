@@ -2,9 +2,26 @@
   "name": "@langue-buster/shared",
   "version": "0.1.0",
   "type": "module",
+<<<<<<< HEAD
   "main": "./scr/index.ts",
   "types": "./src/index.ts",
   "files": ["dist", "src"],
+=======
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+>>>>>>> 7958ecf (Fix workspace package exports for built runtime resolution)
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint src --ext .ts",
