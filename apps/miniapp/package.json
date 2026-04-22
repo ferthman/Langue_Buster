@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.json --noEmit && vite build",
+    "build": "node ../../node_modules/typescript/bin/tsc --build tsconfig.build.json && vite build",
     "dev": "vite",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --build tsconfig.build.json"
   },
   "dependencies": {
     "@langue-buster/analytics": "workspace:*",

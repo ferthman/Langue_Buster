@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typings": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,6 +18,11 @@
       "default": "./dist/auth.js"
     },
     "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "auth": ["dist/auth.d.ts"]
+    }
   },
   "files": ["dist"],
   "scripts": {

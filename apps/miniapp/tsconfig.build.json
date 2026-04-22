@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "references": [
+    { "path": "../../packages/shared/tsconfig.build.json" },
+    { "path": "../../packages/game-engine/tsconfig.build.json" },
+    { "path": "../../packages/content-core/tsconfig.build.json" },
+    { "path": "../../packages/analytics/tsconfig.build.json" },
+    { "path": "../../packages/ui/tsconfig.build.json" }
+  ]
+}

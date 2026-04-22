@@ -8,5 +8,6 @@
     "declaration": true,
     "declarationMap": false,
     "sourceMap": true
-  }
+  },
+  "exclude": ["src/**/*.test.ts"]
 }
