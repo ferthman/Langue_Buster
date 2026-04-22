@@ -4,7 +4,7 @@ import {
   InMemorySessionRepository,
   InMemoryUserRepository,
 } from './repositories.js';
-import { createAuthService } from './service.js';
+import { createAuthService, normalizeAuthError } from './service.js';
 import { computeTelegramInitDataHash } from './telegram.js';
 
 const testBotToken = 'telegram-test-token';
@@ -53,6 +53,21 @@ describe('createAuthService', () => {
 
     expect(response.user.firstName).toBe('mila');
     expect(response.user.telegramUserId).toBe('999001');
+  });
+
+  it('returns detailed validation messages for auth schema failures', () => {
+    const error = normalizeAuthError({
+      name: 'ZodError',
+      issues: [
+        {
+          path: ['user', 'firstName'],
+          message: 'Invalid input: expected string, received undefined',
+        },
+      ],
+    });
+
+    expect(error.code).toBe('malformed_init_data');
+    expect(error.message).toContain('user.firstName');
   });
 });
 

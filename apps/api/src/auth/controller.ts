@@ -30,6 +30,10 @@ export function createAuthController(authService: AuthService, sessionVerifier: 
         };
       } catch (error) {
         const normalizedError = normalizeAuthError(error);
+        console.error('[auth] telegram authentication failed', {
+          code: normalizedError.code,
+          message: normalizedError.message,
+        });
 
         return {
           status: normalizedError.code === 'invalid_signature' ? 401 : 400,

@@ -64,7 +64,7 @@ export function normalizeAuthError(error: unknown): AuthError {
   if (isZodLikeError(error)) {
     return {
       code: 'malformed_init_data',
-      message: 'Authentication payload did not match the expected schema.',
+      message: buildZodIssueMessage(error),
     };
   }
 
@@ -80,4 +80,39 @@ export function normalizeAuthError(error: unknown): AuthError {
 
 function isZodLikeError(error: unknown): error is { name: string } {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'ZodError';
+}
+
+function buildZodIssueMessage(error: unknown) {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('issues' in error) ||
+    !Array.isArray(error.issues)
+  ) {
+    return 'Authentication payload did not match the expected schema.';
+  }
+
+  const issues = error.issues
+    .map((issue) => {
+      if (typeof issue !== 'object' || issue === null) {
+        return null;
+      }
+
+      const path =
+        'path' in issue && Array.isArray(issue.path) && issue.path.length > 0
+          ? issue.path.join('.')
+          : 'root';
+      const message = 'message' in issue && typeof issue.message === 'string'
+        ? issue.message
+        : 'Invalid value.';
+
+      return `${path}: ${message}`;
+    })
+    .filter((value): value is string => Boolean(value));
+
+  if (issues.length === 0) {
+    return 'Authentication payload did not match the expected schema.';
+  }
+
+  return `Authentication payload validation failed: ${issues.join('; ')}`;
 }
