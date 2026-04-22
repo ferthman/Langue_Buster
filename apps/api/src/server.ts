@@ -1,0 +1,95 @@
+import {
+  createServer,
+  type Server,
+} from 'node:http';
+import { URL } from 'node:url';
+
+import { createAuthModuleFromEnvironment } from './auth/index.js';
+import { readJsonBody, sendJson } from './http.js';
+
+type CreateApiServerOptions = {
+  env: Record<string, string | undefined>;
+  now?: () => Date;
+  sessionTtlSeconds?: number;
+  maxAuthAgeSeconds?: number;
+};
+
+export type ApiRequest = AsyncIterable<Buffer | string> & {
+  method?: string;
+  url?: string;
+  headers: Record<string, string | string[] | undefined>;
+};
+
+export type ApiResponse = {
+  statusCode: number;
+  setHeader(name: string, value: string): void;
+  end(body?: string): void;
+};
+
+export function createApiRequestHandler(options: CreateApiServerOptions) {
+  const authModule = createAuthModuleFromEnvironment(options.env, {
+    now: options.now,
+    sessionTtlSeconds: options.sessionTtlSeconds,
+    maxAuthAgeSeconds: options.maxAuthAgeSeconds,
+  });
+
+  return async (request: ApiRequest, response: ApiResponse) => {
+    await routeRequest(request, response, authModule.controller).catch(() => {
+      sendJson(response, 500, {
+        code: 'invalid_init_data',
+        message: 'Internal server error.',
+      });
+    });
+  };
+}
+
+export function createApiServer(options: CreateApiServerOptions): Server {
+  const handler = createApiRequestHandler(options);
+
+  return createServer((request, response) => {
+    void handler(request, response);
+  });
+}
+
+type AuthController = ReturnType<typeof createAuthModuleFromEnvironment>['controller'];
+
+async function routeRequest(
+  request: ApiRequest,
+  response: ApiResponse,
+  authController: AuthController,
+) {
+  const method = request.method ?? 'GET';
+  const url = new URL(request.url ?? '/', 'http://localhost');
+
+  if (method === 'POST' && url.pathname === '/auth/telegram') {
+    const body = await readJsonBody(request);
+    const result = await authController.handleTelegramAuth(body);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/auth/session') {
+    const authorization = request.headers.authorization;
+    const authorizationHeader =
+      typeof authorization === 'string' ? authorization : authorization?.[0];
+    const result = await authController.handleSessionLookup(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  sendJson(response, 404, {
+    code: 'invalid_init_data',
+    message: 'Route not found.',
+  });
+}
+
+export async function startApiServer(options: CreateApiServerOptions): Promise<Server> {
+  const server = createApiServer(options);
+  const port = Number(options.env.PORT ?? 4000);
+
+  await new Promise<void>((resolve) => {
+    server.listen(port, resolve);
+  });
+
+  return server;
+}

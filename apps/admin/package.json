@@ -1,0 +1,17 @@
+{
+  "name": "@langue-buster/admin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.json --watch --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@langue-buster/content-core": "workspace:*",
+    "@langue-buster/shared": "workspace:*"
+  }
+}

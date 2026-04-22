@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/miniapp" },
+    { "path": "./apps/admin" },
+    { "path": "./apps/api" },
+    { "path": "./packages/config" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/content-core" },
+    { "path": "./packages/game-engine" },
+    { "path": "./packages/analytics" },
+    { "path": "./packages/ui" }
+  ]
+}
