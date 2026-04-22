@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": "10.10.0"
+  },
   "scripts": {
     "build": "corepack pnpm -r build",
     "build:api": "corepack pnpm --filter @langue-buster/api... build",
@@ -10,6 +14,8 @@
     "dev:admin": "corepack pnpm --filter @langue-buster/admin dev",
     "dev:api": "corepack pnpm --filter @langue-buster/api dev",
     "lint": "corepack pnpm -r lint",
+    "railway:build": "corepack pnpm --filter @langue-buster/api... build",
+    "railway:start": "corepack pnpm --filter @langue-buster/api start",
     "start:api": "corepack pnpm --filter @langue-buster/api start",
     "test": "corepack pnpm -r test",
     "typecheck": "corepack pnpm -r typecheck"
