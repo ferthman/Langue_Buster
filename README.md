@@ -506,3 +506,4 @@ This project must avoid copying:
 - trademarked naming
 
 Use genre inspiration, not asset theft. We are building a product, not a lawsuit starter pack.
+# Langue_Buster
