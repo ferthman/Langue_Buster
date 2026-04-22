@@ -143,7 +143,7 @@ describe('mounted auth routes', () => {
           PORT: '4000',
         },
       }),
-    ).toThrow(/runtime environment is invalid/i);
+    ).toThrow(/missing required environment variable\(s\): TELEGRAM_BOT_TOKEN/i);
   });
 
   it('rejects invalid session tokens through GET /auth/session', async () => {
