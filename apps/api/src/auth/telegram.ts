@@ -116,15 +116,31 @@ export function parseTelegramUser(rawUserJson: string): TelegramUser {
     createAuthError('malformed_init_data', 'Telegram user payload is not valid JSON.');
   }
 
+  const firstName = normalizeTelegramFirstName(rawUser);
+
   return telegramUserSchema.parse({
     id: String(rawUser.id),
     username: rawUser.username,
-    firstName: rawUser.first_name,
+    firstName,
     lastName: rawUser.last_name,
     languageCode: rawUser.language_code,
     isPremium: rawUser.is_premium ?? false,
     allowsWriteToPm: rawUser.allows_write_to_pm,
   });
+}
+
+function normalizeTelegramFirstName(rawUser: RawTelegramUser) {
+  const trimmedFirstName = rawUser.first_name?.trim();
+  if (trimmedFirstName) {
+    return trimmedFirstName;
+  }
+
+  const trimmedUsername = rawUser.username?.trim();
+  if (trimmedUsername) {
+    return trimmedUsername;
+  }
+
+  return `Telegram ${rawUser.id}`;
 }
 
 export function createAuthError(code: AuthError['code'], message: string): never {

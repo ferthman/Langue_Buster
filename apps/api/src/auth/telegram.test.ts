@@ -58,7 +58,7 @@ describe('validateTelegramInitData', () => {
     ).toThrow(/missing the user payload/i);
   });
 
-  it('rejects user payloads with missing required user fields', () => {
+  it('falls back to username when Telegram user payload has no first_name', () => {
     const user = JSON.stringify({
       id: 123456,
       username: 'dmitriy',
@@ -71,12 +71,32 @@ describe('validateTelegramInitData', () => {
     const hash = computeTelegramInitDataHash(params.toString(), testBotToken);
     params.set('hash', hash);
 
-    expect(() =>
-      validateTelegramInitData(params.toString(), {
-        botToken: testBotToken,
-        now: () => fixedNow,
-      }),
-    ).toThrow();
+    const result = validateTelegramInitData(params.toString(), {
+      botToken: testBotToken,
+      now: () => fixedNow,
+    });
+
+    expect(result.user.firstName).toBe('dmitriy');
+  });
+
+  it('falls back to a technical label when Telegram user payload has neither first_name nor username', () => {
+    const user = JSON.stringify({
+      id: 123456,
+    });
+    const params = new URLSearchParams({
+      auth_date: String(Math.floor(fixedNow.getTime() / 1000)),
+      query_id: 'AAEAAAE',
+      user,
+    });
+    const hash = computeTelegramInitDataHash(params.toString(), testBotToken);
+    params.set('hash', hash);
+
+    const result = validateTelegramInitData(params.toString(), {
+      botToken: testBotToken,
+      now: () => fixedNow,
+    });
+
+    expect(result.user.firstName).toBe('Telegram 123456');
   });
 });
 

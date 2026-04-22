@@ -31,15 +31,46 @@ describe('createAuthService', () => {
     expect(response.session.userId).toBe(response.user.id);
     await expect(sessionRepository.findById(response.session.id)).resolves.toEqual(response.session);
   });
+
+  it('creates a session when Telegram payload omits first_name', async () => {
+    const userRepository = new InMemoryUserRepository({
+      now: () => fixedNow,
+    });
+    const sessionRepository = new InMemorySessionRepository();
+    const service = createAuthService({
+      botToken: testBotToken,
+      userRepository,
+      sessionRepository,
+      now: () => fixedNow,
+    });
+
+    const response = await service.authenticateTelegramLaunch({
+      initData: createSignedInitData({
+        id: 999001,
+        username: 'mila',
+      }),
+    });
+
+    expect(response.user.firstName).toBe('mila');
+    expect(response.user.telegramUserId).toBe('999001');
+  });
 });
 
-function createSignedInitData() {
+function createSignedInitData(
+  input: {
+    id?: number;
+    firstName?: string;
+    username?: string;
+    languageCode?: string;
+    isPremium?: boolean;
+  } = {},
+) {
   const user = JSON.stringify({
-    id: 123456,
-    first_name: 'Dmitriy',
-    username: 'dmitriy',
-    language_code: 'ru',
-    is_premium: true,
+    id: input.id ?? 123456,
+    ...(input.firstName ? { first_name: input.firstName } : {}),
+    ...(input.username ? { username: input.username } : {}),
+    language_code: input.languageCode ?? 'ru',
+    is_premium: input.isPremium ?? true,
   });
 
   const params = new URLSearchParams({
