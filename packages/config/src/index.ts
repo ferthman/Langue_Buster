@@ -5,6 +5,12 @@ export const environmentSchema = z.object({
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   MINIAPP_BASE_URL: z.string().url().default('http://localhost:3000'),
   POSTGRES_URL: z.string().min(1).optional(),
+  DATABASE_URL: z.string().min(1).optional(),
+  PGHOST: z.string().min(1).optional(),
+  PGPORT: z.string().min(1).optional(),
+  PGDATABASE: z.string().min(1).optional(),
+  PGUSER: z.string().min(1).optional(),
+  PGPASSWORD: z.string().min(1).optional(),
   REDIS_URL: z.string().min(1).optional(),
 });
 

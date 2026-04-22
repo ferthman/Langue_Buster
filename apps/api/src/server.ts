@@ -8,7 +8,7 @@ import { createAuthModule, createPostgresAuthRepositories } from './auth/index.j
 import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
 import { AuthDomainError } from './auth/errors.js';
 import type { DatabaseClient } from './db/client.js';
-import { createDatabaseRuntime } from './db/runtime.js';
+import { createDatabaseRuntime, resolveDatabaseConnectionString } from './db/runtime.js';
 import { readJsonBody, sendJson } from './http.js';
 import { createRunModule } from './runs/index.js';
 import { createUnavailableRunController, type RunController } from './runs/controller.js';
@@ -37,7 +37,7 @@ export type ApiResponse = {
 export function createApiRequestHandler(options: CreateApiServerOptions) {
   const databaseRuntime = createDatabaseRuntime({
     pool: options.pool,
-    connectionString: options.env.POSTGRES_URL,
+    connectionString: resolveDatabaseConnectionString(options.env),
   });
   const authConfigured = hasRequiredRuntime(options.env);
   const modules = createApiModules(options, databaseRuntime.client);
@@ -222,7 +222,7 @@ export async function startApiServer(options: CreateApiServerOptions): Promise<S
 function hasRequiredRuntime(env: Record<string, string | undefined>): boolean {
   return Boolean(
     env.TELEGRAM_BOT_TOKEN?.trim().length
-      && env.POSTGRES_URL?.trim().length,
+      && resolveDatabaseConnectionString(env),
   );
 }
 
