@@ -9,7 +9,7 @@ import { createUnavailableAuthController, type AuthController } from './auth/con
 import { AuthDomainError } from './auth/errors.js';
 import type { DatabaseClient } from './db/client.js';
 import { createDatabaseRuntime, resolveDatabaseConnectionString } from './db/runtime.js';
-import { readJsonBody, sendJson } from './http.js';
+import { applyCors, readJsonBody, sendJson } from './http.js';
 import { createMasteryModule } from './mastery/index.js';
 import { createUnavailableMasteryController, type MasteryController } from './mastery/controller.js';
 import { createRunContentRepository } from './runs/content.js';
@@ -53,6 +53,7 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
       runController: modules.runController,
       masteryController: modules.masteryController,
       authConfigured,
+      miniAppBaseUrl: options.env.MINIAPP_BASE_URL,
     }).catch(() => {
       sendJson(response, 500, {
         code: 'run_unavailable',
@@ -134,10 +135,25 @@ async function routeRequest(
     runController: RunController;
     masteryController: MasteryController;
     authConfigured: boolean;
+    miniAppBaseUrl?: string;
   },
 ) {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
+  const originHeader = request.headers.origin;
+  const requestOrigin = typeof originHeader === 'string' ? originHeader : originHeader?.[0];
+  const allowedOrigin = options.authConfigured ? options.miniAppBaseUrl : undefined;
+
+  applyCors(response, {
+    origin: requestOrigin,
+    allowedOrigin,
+  });
+
+  if (method === 'OPTIONS') {
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
   const authorization = request.headers.authorization;
   const authorizationHeader =
     typeof authorization === 'string' ? authorization : authorization?.[0];

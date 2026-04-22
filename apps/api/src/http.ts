@@ -12,6 +12,30 @@ export async function readJsonBody(request: AsyncIterable<Buffer | string>): Pro
   return JSON.parse(body) as unknown;
 }
 
+export function applyCors(
+  response: {
+    setHeader(name: string, value: string): void;
+  },
+  input: {
+    origin?: string;
+    allowedOrigin?: string;
+  },
+): void {
+  const allowOrigin =
+    input.origin && input.allowedOrigin && input.origin === input.allowedOrigin
+      ? input.origin
+      : input.allowedOrigin;
+
+  if (!allowOrigin) {
+    return;
+  }
+
+  response.setHeader('access-control-allow-origin', allowOrigin);
+  response.setHeader('vary', 'Origin');
+  response.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+  response.setHeader('access-control-allow-headers', 'authorization,content-type');
+ }
+
 export function sendJson(
   response: {
     statusCode: number;

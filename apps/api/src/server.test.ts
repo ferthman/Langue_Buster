@@ -68,6 +68,41 @@ describe('mounted auth and run routes', () => {
     });
   });
 
+  it('returns CORS headers for requests from the configured mini app origin', async () => {
+    const handler = createHandler();
+
+    const response = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/',
+      headers: {
+        origin: 'http://localhost:3000',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(response.headers.get('access-control-allow-methods')).toBe('GET,POST,OPTIONS');
+    expect(response.headers.get('access-control-allow-headers')).toBe(
+      'authorization,content-type',
+    );
+  });
+
+  it('answers CORS preflight requests', async () => {
+    const handler = createHandler();
+
+    const response = await dispatchJson(handler, {
+      method: 'OPTIONS',
+      url: '/auth/telegram',
+      headers: {
+        origin: 'http://localhost:3000',
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.body).toBeNull();
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+  });
+
   it('authenticates through POST /auth/telegram and verifies the persisted session', async () => {
     const handler = createHandler();
     const authResponse = await authenticate(handler, '123456');
