@@ -94,6 +94,19 @@ describe('App bootstrap and routing', () => {
     expect(screen.getByText('down')).toBeTruthy();
   });
 
+  it('shows a user-safe message when the API is unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Load failed')));
+
+    renderApp('/');
+
+    expect(await screen.findByText('Не удалось открыть приложение')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Не удалось связаться с сервером. Проверьте, что API доступен по HTTPS и открыт извне Telegram.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('redirects authenticated users without focus level to placement', async () => {
     window.localStorage.setItem('langue-buster.onboardingSeen', 'true');
     mockFetchSequence([

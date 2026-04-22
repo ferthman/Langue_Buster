@@ -35,6 +35,12 @@ Reasons:
 
 Telegram Game format is too narrow for a real learning product. It is fine for a score-chasing arcade toy. It is not fine for a scalable language-learning system.
 
+## Mini App runtime note
+
+The frontend reads the backend origin from `VITE_API_BASE_URL`.
+
+For Telegram launches, the backend must be reachable over `https://` from the public internet. A local value such as `http://localhost:4000` works only for local browser development on the same machine and will fail inside Telegram on a phone or remote client.
+
 ## Target learning model
 
 The level structure should follow:

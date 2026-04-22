@@ -51,6 +51,9 @@ const apiBaseUrl = normalizeBaseUrl(
   (import.meta as ImportMeta & { env: { VITE_API_BASE_URL?: string } }).env.VITE_API_BASE_URL,
 );
 
+const networkFailureMessage =
+  'Не удалось связаться с сервером. Проверьте, что API доступен по HTTPS и открыт извне Telegram.';
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -200,15 +203,21 @@ async function request<T>(input: {
   errorSchemas: readonly SchemaLike<ApiErrorPayload>[];
   fallbackErrorMessage: string;
 }): Promise<T> {
-  const response = await fetch(buildUrl(input.path), {
-    method: input.method,
-    headers: {
-      Accept: 'application/json',
-      ...(input.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(input.token ? { Authorization: `Bearer ${input.token}` } : {}),
-    },
-    body: input.body ? JSON.stringify(input.body) : undefined,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(buildUrl(input.path), {
+      method: input.method,
+      headers: {
+        Accept: 'application/json',
+        ...(input.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(input.token ? { Authorization: `Bearer ${input.token}` } : {}),
+      },
+      body: input.body ? JSON.stringify(input.body) : undefined,
+    });
+  } catch {
+    throw new ApiClientError(0, {}, networkFailureMessage);
+  }
 
   const payload: unknown = await parseJson(response);
   if (!response.ok) {
