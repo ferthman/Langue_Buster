@@ -10,6 +10,8 @@
   },
   "exclude": ["src/**/*.test.ts"],
   "references": [
+    { "path": "../../packages/game-engine/tsconfig.build.json" },
+    { "path": "../../packages/content-core/tsconfig.build.json" },
     { "path": "../../packages/shared/tsconfig.build.json" },
     { "path": "../../packages/config/tsconfig.build.json" }
   ]

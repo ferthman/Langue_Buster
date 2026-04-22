@@ -4,16 +4,22 @@ import {
 } from 'node:http';
 import { URL } from 'node:url';
 
-import { createAuthModuleFromEnvironment } from './auth/index.js';
+import { createAuthModule, createPostgresAuthRepositories } from './auth/index.js';
 import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
 import { AuthDomainError } from './auth/errors.js';
+import type { DatabaseClient } from './db/client.js';
+import { createDatabaseRuntime } from './db/runtime.js';
 import { readJsonBody, sendJson } from './http.js';
+import { createRunModule } from './runs/index.js';
+import { createUnavailableRunController, type RunController } from './runs/controller.js';
 
 type CreateApiServerOptions = {
   env: Record<string, string | undefined>;
   now?: () => Date;
   sessionTtlSeconds?: number;
   maxAuthAgeSeconds?: number;
+  pool?: DatabaseClient;
+  seedGenerator?: () => number;
 };
 
 export type ApiRequest = AsyncIterable<Buffer | string> & {
@@ -29,14 +35,22 @@ export type ApiResponse = {
 };
 
 export function createApiRequestHandler(options: CreateApiServerOptions) {
-  const authController = createAuthControllerFromEnvironment(options);
-  const authConfigured = typeof options.env.TELEGRAM_BOT_TOKEN === 'string'
-    && options.env.TELEGRAM_BOT_TOKEN.trim().length > 0;
+  const databaseRuntime = createDatabaseRuntime({
+    pool: options.pool,
+    connectionString: options.env.POSTGRES_URL,
+  });
+  const authConfigured = hasRequiredRuntime(options.env);
+  const modules = createApiModules(options, databaseRuntime.client);
 
   return async (request: ApiRequest, response: ApiResponse) => {
-    await routeRequest(request, response, authController, authConfigured).catch(() => {
+    await databaseRuntime.ready;
+    await routeRequest(request, response, {
+      authController: modules.authController,
+      runController: modules.runController,
+      authConfigured,
+    }).catch(() => {
       sendJson(response, 500, {
-        code: 'invalid_init_data',
+        code: 'run_unavailable',
         message: 'Internal server error.',
       });
     });
@@ -51,41 +65,75 @@ export function createApiServer(options: CreateApiServerOptions): Server {
   });
 }
 
-function createAuthControllerFromEnvironment(options: CreateApiServerOptions): AuthController {
+function createApiModules(
+  options: CreateApiServerOptions,
+  client: Pick<DatabaseClient, 'query'>,
+): {
+  authController: AuthController;
+  runController: RunController;
+} {
   try {
-    const authModule = createAuthModuleFromEnvironment(options.env, {
+    const authRepositories = createPostgresAuthRepositories(client, {
+      now: options.now,
+    });
+    const authModule = createAuthModule({
+      botToken: requireBotToken(options.env),
+      userRepository: authRepositories.userRepository,
+      sessionRepository: authRepositories.sessionRepository,
       now: options.now,
       sessionTtlSeconds: options.sessionTtlSeconds,
       maxAuthAgeSeconds: options.maxAuthAgeSeconds,
     });
+    const runModule = createRunModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      now: options.now,
+      seedGenerator: options.seedGenerator,
+    });
 
-    return authModule.controller;
+    return {
+      authController: authModule.controller,
+      runController: runModule.controller,
+    };
   } catch (error) {
-    if (error instanceof AuthDomainError && error.code === 'invalid_init_data') {
-      return createUnavailableAuthController(error.message);
-    }
-
-    throw error;
+    const message = error instanceof Error ? error.message : 'API runtime is unavailable.';
+    return {
+      authController: createUnavailableAuthController(message),
+      runController: createUnavailableRunController(message),
+    };
   }
 }
 
 async function routeRequest(
   request: ApiRequest,
   response: ApiResponse,
-  authController: AuthController,
-  authConfigured: boolean,
+  options: {
+    authController: AuthController;
+    runController: RunController;
+    authConfigured: boolean;
+  },
 ) {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
+  const authorization = request.headers.authorization;
+  const authorizationHeader =
+    typeof authorization === 'string' ? authorization : authorization?.[0];
+  const runRoute = url.pathname.match(/^\/runs\/([^/]+)(?:\/(result|answer|move|finish))?$/);
 
   if (method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
     sendJson(response, 200, {
       status: 'ok',
       service: 'langue-buster-api',
-      authConfigured,
+      authConfigured: options.authConfigured,
       routes: {
         telegramAuth: 'POST /auth/telegram',
         sessionLookup: 'GET /auth/session',
+        runStart: 'POST /runs/start',
+        runAnswer: 'POST /runs/:runId/answer',
+        runMove: 'POST /runs/:runId/move',
+        runFinish: 'POST /runs/:runId/finish',
+        runState: 'GET /runs/:runId',
+        runResult: 'GET /runs/:runId/result',
       },
     });
     return;
@@ -93,22 +141,69 @@ async function routeRequest(
 
   if (method === 'POST' && url.pathname === '/auth/telegram') {
     const body = await readJsonBody(request);
-    const result = await authController.handleTelegramAuth(body);
+    const result = await options.authController.handleTelegramAuth(body);
     sendJson(response, result.status, result.body);
     return;
   }
 
   if (method === 'GET' && url.pathname === '/auth/session') {
-    const authorization = request.headers.authorization;
-    const authorizationHeader =
-      typeof authorization === 'string' ? authorization : authorization?.[0];
-    const result = await authController.handleSessionLookup(authorizationHeader);
+    const result = await options.authController.handleSessionLookup(authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }
 
+  if (method === 'POST' && url.pathname === '/runs/start') {
+    const body = await readJsonBody(request);
+    const result = await options.runController.handleStart(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (runRoute) {
+    const [, runId, action] = runRoute;
+    if (!runId) {
+      sendJson(response, 404, {
+        code: 'run_not_found',
+        message: 'Run route not found.',
+      });
+      return;
+    }
+
+    if (method === 'GET' && !action) {
+      const result = await options.runController.handleGetRun(runId, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'GET' && action === 'result') {
+      const result = await options.runController.handleGetResult(runId, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'POST' && action === 'answer') {
+      const body = await readJsonBody(request);
+      const result = await options.runController.handleAnswer(runId, body, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'POST' && action === 'move') {
+      const body = await readJsonBody(request);
+      const result = await options.runController.handleMove(runId, body, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'POST' && action === 'finish') {
+      const result = await options.runController.handleFinish(runId, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+  }
+
   sendJson(response, 404, {
-    code: 'invalid_init_data',
+    code: 'run_not_found',
     message: 'Route not found.',
   });
 }
@@ -122,4 +217,23 @@ export async function startApiServer(options: CreateApiServerOptions): Promise<S
   });
 
   return server;
+}
+
+function hasRequiredRuntime(env: Record<string, string | undefined>): boolean {
+  return Boolean(
+    env.TELEGRAM_BOT_TOKEN?.trim().length
+      && env.POSTGRES_URL?.trim().length,
+  );
+}
+
+function requireBotToken(env: Record<string, string | undefined>): string {
+  const botToken = env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!botToken) {
+    throw new AuthDomainError(
+      'invalid_init_data',
+      'API runtime environment is invalid or incomplete for auth startup. Missing required environment variable(s): TELEGRAM_BOT_TOKEN.',
+    );
+  }
+
+  return botToken;
 }

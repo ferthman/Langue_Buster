@@ -1,0 +1,490 @@
+import {
+  buildAnswerTelemetryEvent,
+  evaluateAnswer,
+  generateQuestion,
+  type DistractorSet,
+  type VocabItem,
+} from '@langue-buster/content-core';
+import {
+  applyPlacement,
+  createInitialEngineState,
+  isRunOver,
+  type EngineState as GameEngineState,
+} from '@langue-buster/game-engine';
+import type {
+  AnswerDirection,
+  AnswerEvent,
+  AnswerEvaluation,
+  Coordinate,
+  GeneratedQuestion,
+  MoveEvent,
+  RunResult,
+  RunSession,
+} from '@langue-buster/shared';
+import { launchLevels, runResultSchema, runSessionSchema } from '@langue-buster/shared';
+import { randomUUID } from 'node:crypto';
+
+import type { RunContentRepository } from './content.js';
+import { RunDomainError } from './errors.js';
+import type {
+  AnswerEventRepository,
+  MoveEventRepository,
+  RunResultRepository,
+  RunSessionRepository,
+} from './repositories.js';
+import { buildRunDurationMs, recomputeRunTotals } from './scoring.js';
+
+type RunServiceDependencies = {
+  runSessionRepository: RunSessionRepository;
+  answerEventRepository: AnswerEventRepository;
+  moveEventRepository: MoveEventRepository;
+  runResultRepository: RunResultRepository;
+  contentRepository: RunContentRepository;
+  now?: () => Date;
+  seedGenerator?: () => number;
+};
+
+export type RunService = ReturnType<typeof createRunService>;
+
+const DEFAULT_HEARTS = 3;
+
+export function createRunService(dependencies: RunServiceDependencies) {
+  const now = dependencies.now ?? (() => new Date());
+  const seedGenerator = dependencies.seedGenerator ?? (() => Math.floor(Math.random() * 0xffffffff));
+
+  return {
+    async startRun(input: {
+      userId: string;
+      levelId: 'A1' | 'A2';
+      direction: AnswerDirection;
+    }): Promise<RunSession> {
+      if (!launchLevels.includes(input.levelId)) {
+        throw new RunDomainError('run_invalid_state', 'Runs may only be started for A1 and A2 during Phase 7.');
+      }
+
+      const startedAt = now().toISOString();
+      const seed = normalizeSeed(seedGenerator());
+      const engineState = cloneEngineState(createInitialEngineState({ seed }));
+      const questionState = createQuestionState({
+        levelId: input.levelId,
+        direction: input.direction,
+        seed,
+        sequence: 0,
+        shownAt: startedAt,
+        contentRepository: dependencies.contentRepository,
+      });
+
+      const run = runSessionSchema.parse({
+        id: `run_${randomUUID()}`,
+        userId: input.userId,
+        levelId: input.levelId,
+        direction: input.direction,
+        status: 'active',
+        heartsRemaining: DEFAULT_HEARTS,
+        score: 0,
+        combo: 0,
+        seed,
+        engineState,
+        currentQuestionState: questionState,
+        answerCount: 0,
+        correctCount: 0,
+        wrongCount: 0,
+        moveCount: 0,
+        startedAt,
+      });
+
+      return dependencies.runSessionRepository.save(run);
+    },
+
+    async getRunForUser(runId: string, userId: string): Promise<RunSession> {
+      const run = await requireOwnedRun(runId, userId, dependencies.runSessionRepository);
+      return run;
+    },
+
+    async getResultForUser(runId: string, userId: string): Promise<RunResult> {
+      const run = await requireOwnedRun(runId, userId, dependencies.runSessionRepository);
+      if (!isTerminalStatus(run.status)) {
+        throw new RunDomainError('run_result_unavailable', 'Run result is not available until the run has finished.');
+      }
+
+      const existing = await dependencies.runResultRepository.findByRunId(runId);
+      if (!existing) {
+        throw new RunDomainError('run_result_unavailable', 'Run result has not been persisted yet.');
+      }
+
+      return existing;
+    },
+
+    async submitAnswer(input: {
+      runId: string;
+      userId: string;
+      selectedOptionId: string;
+      answeredAt?: string;
+    }): Promise<{
+      run: RunSession;
+      evaluation: AnswerEvaluation;
+      result?: RunResult;
+    }> {
+      const run = await requireOwnedRun(input.runId, input.userId, dependencies.runSessionRepository);
+      const questionState = run.currentQuestionState;
+
+      if (run.status !== 'active' || !questionState || questionState.answerState !== 'awaiting_answer') {
+        throw new RunDomainError('run_invalid_state', 'This run is not currently accepting answer submissions.');
+      }
+
+      const evaluation = evaluateAnswer(questionState.question, input.selectedOptionId, {
+        shownAt: questionState.shownAt,
+        answeredAt: input.answeredAt,
+      });
+      const occurredAt = input.answeredAt ?? now().toISOString();
+      const telemetryEvent = buildAnswerTelemetryEvent({
+        question: questionState.question,
+        evaluation,
+        occurredAt,
+      });
+      const answerEvent: AnswerEvent = {
+        id: `ans_${randomUUID()}`,
+        runId: run.id,
+        questionId: telemetryEvent.questionId,
+        sourceItemId: telemetryEvent.sourceItemId,
+        selectedOptionId: telemetryEvent.selectedOptionId,
+        correctOptionId: telemetryEvent.correctOptionId,
+        correctness: telemetryEvent.isCorrect,
+        timingMs: telemetryEvent.timingMs,
+        penalty: evaluation.penalty,
+        occurredAt,
+      };
+      await dependencies.answerEventRepository.save(answerEvent);
+
+      if (evaluation.isCorrect) {
+        const nextRun = await dependencies.runSessionRepository.save({
+          ...run,
+          status: 'awaiting_move',
+          answerCount: run.answerCount + 1,
+          correctCount: run.correctCount + 1,
+          currentQuestionState: {
+            ...questionState,
+            answerState: 'answered_correct',
+            answeredAt: occurredAt,
+            selectedOptionId: input.selectedOptionId,
+          },
+        });
+
+        return {
+          run: nextRun,
+          evaluation,
+        };
+      }
+
+      const heartsRemaining = Math.max(0, run.heartsRemaining - (evaluation.penalty?.amount ?? 0));
+      const baseRun: RunSession = {
+        ...run,
+        heartsRemaining,
+        answerCount: run.answerCount + 1,
+        wrongCount: run.wrongCount + 1,
+      };
+
+      if (heartsRemaining === 0) {
+        const finishedRun = await dependencies.runSessionRepository.save({
+          ...baseRun,
+          status: 'failed',
+          currentQuestionState: {
+            ...questionState,
+            answerState: 'answered_wrong',
+            answeredAt: occurredAt,
+            selectedOptionId: input.selectedOptionId,
+          },
+          finishedAt: occurredAt,
+        });
+        const result = await finalizeRunInternal(finishedRun, dependencies, now);
+
+        return {
+          run: finishedRun,
+          evaluation,
+          result,
+        };
+      }
+
+      const nextQuestion = createQuestionState({
+        levelId: run.levelId,
+        direction: run.direction,
+        seed: run.seed,
+        sequence: questionState.sequence + 1,
+        shownAt: occurredAt,
+        contentRepository: dependencies.contentRepository,
+      });
+      const nextRun = await dependencies.runSessionRepository.save({
+        ...baseRun,
+        status: 'active',
+        currentQuestionState: nextQuestion,
+      });
+
+      return {
+        run: nextRun,
+        evaluation,
+      };
+    },
+
+    async submitMove(input: {
+      runId: string;
+      userId: string;
+      trayIndex: number;
+      origin: Coordinate;
+    }): Promise<{
+      run: RunSession;
+      moveEvent: MoveEvent;
+      result?: RunResult;
+    }> {
+      const run = await requireOwnedRun(input.runId, input.userId, dependencies.runSessionRepository);
+      const questionState = run.currentQuestionState;
+      if (run.status !== 'awaiting_move' || !questionState || questionState.answerState !== 'answered_correct') {
+        throw new RunDomainError('run_invalid_state', 'This run is not currently accepting move submissions.');
+      }
+
+      const activePiece = run.engineState.tray[input.trayIndex];
+      if (!activePiece) {
+        throw new RunDomainError('run_invalid_move', `Tray slot ${input.trayIndex} does not contain an active piece.`);
+      }
+
+      let applied;
+      try {
+        applied = applyPlacement(run.engineState as GameEngineState, input.trayIndex, input.origin);
+      } catch (error) {
+        throw new RunDomainError(
+          'run_invalid_move',
+          error instanceof Error ? error.message : 'Move could not be applied by the game engine.',
+        );
+      }
+
+      const occurredAt = now().toISOString();
+      const moveEvent: MoveEvent = {
+        id: `mov_${randomUUID()}`,
+        runId: run.id,
+        engineTurn: run.engineState.turn,
+        trayIndex: input.trayIndex,
+        pieceInstanceId: applied.placedPiece.instanceId,
+        pieceId: applied.placedPiece.pieceId,
+        origin: input.origin,
+        validationResult: 'accepted',
+        clearedLineCount: applied.clearResult.clearedLineCount,
+        scoreBreakdown: applied.scoreBreakdown,
+        resultingScore: applied.state.score,
+        resultingCombo: applied.state.combo,
+        occurredAt,
+      };
+      await dependencies.moveEventRepository.save(moveEvent);
+
+      const baseRun: RunSession = {
+        ...run,
+        status: 'active',
+        score: applied.state.score,
+        combo: applied.state.combo,
+        engineState: cloneEngineState(applied.state),
+        moveCount: run.moveCount + 1,
+      };
+      const runOver = isRunOver(applied.state.board, applied.state.tray);
+
+      if (runOver.isOver) {
+        const finishedRun = await dependencies.runSessionRepository.save({
+          ...baseRun,
+          status: 'completed',
+          currentQuestionState: null,
+          finishedAt: occurredAt,
+        });
+        const result = await finalizeRunInternal(finishedRun, dependencies, now);
+
+        return {
+          run: finishedRun,
+          moveEvent,
+          result,
+        };
+      }
+
+      const nextQuestion = createQuestionState({
+        levelId: run.levelId,
+        direction: run.direction,
+        seed: run.seed,
+        sequence: (questionState.sequence ?? 0) + 1,
+        shownAt: occurredAt,
+        contentRepository: dependencies.contentRepository,
+      });
+
+      const nextRun = await dependencies.runSessionRepository.save({
+        ...baseRun,
+        status: 'active',
+        currentQuestionState: nextQuestion,
+      });
+
+      return {
+        run: nextRun,
+        moveEvent,
+      };
+    },
+
+    async finishRun(input: { runId: string; userId: string }): Promise<{ run: RunSession; result: RunResult }> {
+      const run = await requireOwnedRun(input.runId, input.userId, dependencies.runSessionRepository);
+      if (isTerminalStatus(run.status)) {
+        const result = await finalizeRunInternal(run, dependencies, now);
+        return {
+          run,
+          result,
+        };
+      }
+
+      const finishedAt = now().toISOString();
+      const terminalRun = await dependencies.runSessionRepository.save({
+        ...run,
+        status: 'abandoned',
+        finishedAt,
+      });
+      const result = await finalizeRunInternal(terminalRun, dependencies, now);
+
+      return {
+        run: terminalRun,
+        result,
+      };
+    },
+  };
+}
+
+async function requireOwnedRun(
+  runId: string,
+  userId: string,
+  repository: RunSessionRepository,
+): Promise<RunSession> {
+  const run = await repository.findById(runId);
+  if (!run) {
+    throw new RunDomainError('run_not_found', 'Run session was not found.');
+  }
+
+  if (run.userId !== userId) {
+    throw new RunDomainError('run_forbidden', 'Run session does not belong to the authenticated user.');
+  }
+
+  return run;
+}
+
+async function finalizeRunInternal(
+  run: RunSession,
+  dependencies: Pick<
+    RunServiceDependencies,
+    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository'
+  >,
+  now: () => Date,
+): Promise<RunResult> {
+  const existing = await dependencies.runResultRepository.findByRunId(run.id);
+  if (existing) {
+    return existing;
+  }
+
+  if (!isTerminalStatus(run.status)) {
+    throw new RunDomainError('run_invalid_state', 'Only terminal runs may be finalized.');
+  }
+
+  const answerEvents = await dependencies.answerEventRepository.findByRunId(run.id);
+  const moveEvents = await dependencies.moveEventRepository.findByRunId(run.id);
+  const totals = recomputeRunTotals(run, moveEvents);
+
+  if (answerEvents.filter((event) => event.correctness).length !== run.correctCount) {
+    throw new RunDomainError('run_integrity_error', 'Correct answer count does not match persisted answer events.');
+  }
+
+  if (answerEvents.filter((event) => !event.correctness).length !== run.wrongCount) {
+    throw new RunDomainError('run_integrity_error', 'Wrong answer count does not match persisted answer events.');
+  }
+
+  const finishedAt = run.finishedAt ?? now().toISOString();
+  const result = runResultSchema.parse({
+    runId: run.id,
+    userId: run.userId,
+    levelId: run.levelId,
+    direction: run.direction,
+    status: run.status,
+    finalScore: totals.finalScore,
+    clearedLinesTotal: totals.clearedLinesTotal,
+    correctCount: run.correctCount,
+    wrongCount: run.wrongCount,
+    startedAt: run.startedAt,
+    finishedAt,
+    durationMs: buildRunDurationMs({
+      startedAt: run.startedAt,
+      finishedAt,
+    }),
+  });
+
+  return dependencies.runResultRepository.save(result);
+}
+
+function isTerminalStatus(status: RunSession['status']): boolean {
+  return status === 'completed' || status === 'failed' || status === 'abandoned';
+}
+
+function createQuestionState(input: {
+  levelId: RunSession['levelId'];
+  direction: AnswerDirection;
+  seed: number;
+  sequence: number;
+  shownAt: string;
+  contentRepository: RunContentRepository;
+}) {
+  if (!launchLevels.includes(input.levelId as (typeof launchLevels)[number])) {
+    throw new RunDomainError('run_unavailable', `No Phase 7 run content exists for ${input.levelId}.`);
+  }
+
+  const bundle = input.contentRepository.getLevelBundle(input.levelId);
+  const sourceItem = selectSourceItem(bundle.vocabItems, input.seed, input.sequence);
+  const question = createGeneratedQuestion({
+    sourceItem,
+    allVocabItems: bundle.vocabItems,
+    distractorSets: bundle.distractorSets,
+    direction: input.direction,
+  });
+
+  return {
+    sequence: input.sequence,
+    shownAt: input.shownAt,
+    answerState: 'awaiting_answer' as const,
+    question,
+  };
+}
+
+function createGeneratedQuestion(input: {
+  sourceItem: VocabItem;
+  allVocabItems: readonly VocabItem[];
+  distractorSets: readonly DistractorSet[];
+  direction: AnswerDirection;
+}): GeneratedQuestion {
+  const promptLanguage = input.direction === 'ru_to_fr' ? 'ru' : 'fr';
+  const answerLanguage = input.direction === 'ru_to_fr' ? 'fr' : 'ru';
+
+  return generateQuestion({
+    sourceItem: input.sourceItem,
+    allVocabItems: [...input.allVocabItems],
+    distractorSets: [...input.distractorSets],
+    promptLanguage,
+    answerLanguage,
+    generatorVersion: 'phase7-v1',
+  });
+}
+
+function selectSourceItem(pool: readonly VocabItem[], seed: number, sequence: number): VocabItem {
+  if (pool.length === 0) {
+    throw new RunDomainError('run_unavailable', 'No approved content exists for the requested level.');
+  }
+
+  const index = normalizeSeed(seed + Math.imul(sequence + 1, 2654435761)) % pool.length;
+  const sourceItem = pool[index];
+  if (!sourceItem) {
+    throw new RunDomainError('run_unavailable', 'A run source item could not be resolved.');
+  }
+
+  return sourceItem;
+}
+
+function normalizeSeed(seed: number): number {
+  return seed >>> 0;
+}
+
+function cloneEngineState(state: GameEngineState): RunSession['engineState'] {
+  return JSON.parse(JSON.stringify(state)) as RunSession['engineState'];
+}

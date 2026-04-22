@@ -1,22 +1,29 @@
 import {
   InMemorySessionRepository,
   InMemoryUserRepository,
+  PostgresSessionRepository,
+  PostgresUserRepository,
+  type SessionRepository,
+  type UserRepository,
 } from './repositories.js';
 import { createAuthController } from './controller.js';
 import { createSessionVerifier } from './session-verifier.js';
 import { createAuthService } from './service.js';
 import { parseApiRuntimeEnvironment } from './runtime.js';
+import type { DatabaseClient } from '../db/client.js';
 
 type CreateAuthModuleOptions = {
   botToken: string;
   now?: () => Date;
   sessionTtlSeconds?: number;
   maxAuthAgeSeconds?: number;
+  userRepository?: UserRepository;
+  sessionRepository?: SessionRepository;
 };
 
 export function createAuthModule(options: CreateAuthModuleOptions) {
-  const userRepository = new InMemoryUserRepository({ now: options.now });
-  const sessionRepository = new InMemorySessionRepository();
+  const userRepository = options.userRepository ?? new InMemoryUserRepository({ now: options.now });
+  const sessionRepository = options.sessionRepository ?? new InMemorySessionRepository();
 
   const authService = createAuthService({
     botToken: options.botToken,
@@ -62,4 +69,19 @@ export function createAuthModuleFromEnvironment(
     ...options,
     botToken: runtime.TELEGRAM_BOT_TOKEN,
   });
+}
+
+export function createPostgresAuthRepositories(
+  client: Pick<DatabaseClient, 'query'>,
+  options: Readonly<{ now?: () => Date }> = {},
+) {
+  return {
+    userRepository: new PostgresUserRepository({
+      client,
+      now: options.now,
+    }),
+    sessionRepository: new PostgresSessionRepository({
+      client,
+    }),
+  };
 }
