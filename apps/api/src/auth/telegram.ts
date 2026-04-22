@@ -117,13 +117,16 @@ export function parseTelegramUser(rawUserJson: string): TelegramUser {
   }
 
   const firstName = normalizeTelegramFirstName(rawUser);
+  const username = normalizeOptionalTelegramString(rawUser.username);
+  const lastName = normalizeOptionalTelegramString(rawUser.last_name);
+  const languageCode = normalizeOptionalTelegramString(rawUser.language_code);
 
   return telegramUserSchema.parse({
     id: String(rawUser.id),
-    username: rawUser.username,
+    username,
     firstName,
-    lastName: rawUser.last_name,
-    languageCode: rawUser.language_code,
+    lastName,
+    languageCode,
     isPremium: rawUser.is_premium ?? false,
     allowsWriteToPm: rawUser.allows_write_to_pm,
   });
@@ -135,12 +138,17 @@ function normalizeTelegramFirstName(rawUser: RawTelegramUser) {
     return trimmedFirstName;
   }
 
-  const trimmedUsername = rawUser.username?.trim();
+  const trimmedUsername = normalizeOptionalTelegramString(rawUser.username);
   if (trimmedUsername) {
     return trimmedUsername;
   }
 
   return `Telegram ${rawUser.id}`;
+}
+
+function normalizeOptionalTelegramString(value: string | undefined) {
+  const trimmedValue = value?.trim();
+  return trimmedValue && trimmedValue.length > 0 ? trimmedValue : undefined;
 }
 
 export function createAuthError(code: AuthError['code'], message: string): never {

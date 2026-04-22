@@ -98,6 +98,33 @@ describe('validateTelegramInitData', () => {
 
     expect(result.user.firstName).toBe('Telegram 123456');
   });
+
+  it('treats empty optional Telegram string fields as missing', () => {
+    const user = JSON.stringify({
+      id: 123456,
+      first_name: 'Dmitriy',
+      last_name: '   ',
+      username: '   ',
+      language_code: '   ',
+    });
+    const params = new URLSearchParams({
+      auth_date: String(Math.floor(fixedNow.getTime() / 1000)),
+      query_id: 'AAEAAAE',
+      user,
+    });
+    const hash = computeTelegramInitDataHash(params.toString(), testBotToken);
+    params.set('hash', hash);
+
+    const result = validateTelegramInitData(params.toString(), {
+      botToken: testBotToken,
+      now: () => fixedNow,
+    });
+
+    expect(result.user.firstName).toBe('Dmitriy');
+    expect(result.user.lastName).toBeUndefined();
+    expect(result.user.username).toBeUndefined();
+    expect(result.user.languageCode).toBeUndefined();
+  });
 });
 
 function createSignedInitData(input: { authDate: number }) {
