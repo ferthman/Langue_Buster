@@ -2,8 +2,8 @@
   "name": "@langue-buster/shared",
   "version": "0.1.0",
   "type": "module",
-  "main": "./dist/index.ts",
-  "types": "./dist/index.ts",
+  "main": "./scr/index.ts",
+  "types": "./src/index.ts",
   "files": ["dist", "src"],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
