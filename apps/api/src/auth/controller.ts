@@ -15,6 +15,8 @@ export type AuthHttpResult = {
   body: AuthResponse | SessionVerificationResponse | AuthError;
 };
 
+export type AuthController = ReturnType<typeof createAuthController>;
+
 export function createAuthController(authService: AuthService, sessionVerifier: SessionVerifier) {
   return {
     async handleTelegramAuth(body: unknown): Promise<AuthHttpResult> {
@@ -53,6 +55,29 @@ export function createAuthController(authService: AuthService, sessionVerifier: 
           body: normalizedError,
         };
       }
+    },
+  };
+}
+
+export function createUnavailableAuthController(message: string) {
+  const body: AuthError = {
+    code: 'auth_unavailable',
+    message,
+  };
+
+  return {
+    async handleTelegramAuth(): Promise<AuthHttpResult> {
+      return {
+        status: 503,
+        body,
+      };
+    },
+
+    async handleSessionLookup(): Promise<AuthHttpResult> {
+      return {
+        status: 503,
+        body,
+      };
     },
   };
 }

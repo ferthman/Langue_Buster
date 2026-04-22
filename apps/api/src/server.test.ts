@@ -136,14 +136,26 @@ describe('mounted auth routes', () => {
     expect((response.body as { code: string }).code).toBe('invalid_session');
   });
 
-  it('fails fast when runtime config is missing bot token', () => {
-    expect(() =>
-      createApiServer({
-        env: {
-          PORT: '4000',
-        },
-      }),
-    ).toThrow(/missing required environment variable\(s\): TELEGRAM_BOT_TOKEN/i);
+  it('returns 503 from auth routes when bot token is missing', async () => {
+    const handler = createApiRequestHandler({
+      env: {
+        PORT: '4000',
+      },
+    });
+
+    const response = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/auth/telegram',
+      body: {
+        initData: 'ignored-for-disabled-auth',
+      },
+    });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      code: 'auth_unavailable',
+      message: expect.stringMatching(/TELEGRAM_BOT_TOKEN/i),
+    });
   });
 
   it('rejects invalid session tokens through GET /auth/session', async () => {

@@ -5,6 +5,8 @@ import {
 import { URL } from 'node:url';
 
 import { createAuthModuleFromEnvironment } from './auth/index.js';
+import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
+import { AuthDomainError } from './auth/errors.js';
 import { readJsonBody, sendJson } from './http.js';
 
 type CreateApiServerOptions = {
@@ -27,14 +29,10 @@ export type ApiResponse = {
 };
 
 export function createApiRequestHandler(options: CreateApiServerOptions) {
-  const authModule = createAuthModuleFromEnvironment(options.env, {
-    now: options.now,
-    sessionTtlSeconds: options.sessionTtlSeconds,
-    maxAuthAgeSeconds: options.maxAuthAgeSeconds,
-  });
+  const authController = createAuthControllerFromEnvironment(options);
 
   return async (request: ApiRequest, response: ApiResponse) => {
-    await routeRequest(request, response, authModule.controller).catch(() => {
+    await routeRequest(request, response, authController).catch(() => {
       sendJson(response, 500, {
         code: 'invalid_init_data',
         message: 'Internal server error.',
@@ -51,7 +49,23 @@ export function createApiServer(options: CreateApiServerOptions): Server {
   });
 }
 
-type AuthController = ReturnType<typeof createAuthModuleFromEnvironment>['controller'];
+function createAuthControllerFromEnvironment(options: CreateApiServerOptions): AuthController {
+  try {
+    const authModule = createAuthModuleFromEnvironment(options.env, {
+      now: options.now,
+      sessionTtlSeconds: options.sessionTtlSeconds,
+      maxAuthAgeSeconds: options.maxAuthAgeSeconds,
+    });
+
+    return authModule.controller;
+  } catch (error) {
+    if (error instanceof AuthDomainError && error.code === 'invalid_init_data') {
+      return createUnavailableAuthController(error.message);
+    }
+
+    throw error;
+  }
+}
 
 async function routeRequest(
   request: ApiRequest,
