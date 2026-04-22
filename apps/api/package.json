@@ -4,17 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
-    "dev": "tsc --project tsconfig.json --watch --noEmit",
+    "build": "node ../../node_modules/typescript/bin/tsc --project tsconfig.build.json",
+    "dev": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --watch --noEmit",
     "lint": "eslint src --ext .ts",
     "start": "node dist/main.js",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@langue-buster/config": "workspace:*",
-    "@langue-buster/content-core": "workspace:*",
-    "@langue-buster/game-engine": "workspace:*",
     "@langue-buster/shared": "workspace:*"
   },
   "devDependencies": {

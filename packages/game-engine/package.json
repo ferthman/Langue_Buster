@@ -13,9 +13,9 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "node ../../node_modules/typescript/bin/tsc --project tsconfig.build.json",
     "lint": "eslint src --ext .ts",
     "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --noEmit"
   }
 }

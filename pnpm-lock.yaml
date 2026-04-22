@@ -53,12 +53,6 @@ importers:
       '@langue-buster/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@langue-buster/content-core':
-        specifier: workspace:*
-        version: link:../../packages/content-core
-      '@langue-buster/game-engine':
-        specifier: workspace:*
-        version: link:../../packages/game-engine
       '@langue-buster/shared':
         specifier: workspace:*
         version: link:../../packages/shared
