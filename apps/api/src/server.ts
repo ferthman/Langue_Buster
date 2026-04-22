@@ -30,9 +30,11 @@ export type ApiResponse = {
 
 export function createApiRequestHandler(options: CreateApiServerOptions) {
   const authController = createAuthControllerFromEnvironment(options);
+  const authConfigured = typeof options.env.TELEGRAM_BOT_TOKEN === 'string'
+    && options.env.TELEGRAM_BOT_TOKEN.trim().length > 0;
 
   return async (request: ApiRequest, response: ApiResponse) => {
-    await routeRequest(request, response, authController).catch(() => {
+    await routeRequest(request, response, authController, authConfigured).catch(() => {
       sendJson(response, 500, {
         code: 'invalid_init_data',
         message: 'Internal server error.',
@@ -71,9 +73,23 @@ async function routeRequest(
   request: ApiRequest,
   response: ApiResponse,
   authController: AuthController,
+  authConfigured: boolean,
 ) {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
+
+  if (method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
+    sendJson(response, 200, {
+      status: 'ok',
+      service: 'langue-buster-api',
+      authConfigured,
+      routes: {
+        telegramAuth: 'POST /auth/telegram',
+        sessionLookup: 'GET /auth/session',
+      },
+    });
+    return;
+  }
 
   if (method === 'POST' && url.pathname === '/auth/telegram') {
     const body = await readJsonBody(request);

@@ -30,6 +30,26 @@ afterEach(async () => {
 });
 
 describe('mounted auth routes', () => {
+  it('returns service status from GET /', async () => {
+    const handler = createHandler();
+
+    const response = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ok',
+      service: 'langue-buster-api',
+      authConfigured: true,
+      routes: {
+        telegramAuth: 'POST /auth/telegram',
+        sessionLookup: 'GET /auth/session',
+      },
+    });
+  });
+
   it('authenticates through POST /auth/telegram', async () => {
     const handler = createHandler();
 
@@ -140,6 +160,22 @@ describe('mounted auth routes', () => {
     const handler = createApiRequestHandler({
       env: {
         PORT: '4000',
+      },
+    });
+
+    const healthResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/health',
+    });
+
+    expect(healthResponse.status).toBe(200);
+    expect(healthResponse.body).toEqual({
+      status: 'ok',
+      service: 'langue-buster-api',
+      authConfigured: false,
+      routes: {
+        telegramAuth: 'POST /auth/telegram',
+        sessionLookup: 'GET /auth/session',
       },
     });
 
