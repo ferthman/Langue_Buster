@@ -12,12 +12,18 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./phase11-launch-pack": {
+      "types": "./dist/phase11-launch-pack.d.ts",
+      "import": "./dist/phase11-launch-pack.js",
+      "default": "./dist/phase11-launch-pack.js"
+    },
     "./package.json": "./package.json"
   },
   "files": ["dist"],
   "scripts": {
     "build": "node ../../node_modules/typescript/bin/tsc --project tsconfig.build.json",
     "lint": "eslint src --ext .ts",
+    "phase11:print-bundle": "node --eval \"import('./dist/phase11-launch-pack.js').then(({ phase11LaunchBundle }) => { console.log(JSON.stringify(phase11LaunchBundle, null, 2)); });\"",
     "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
     "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --noEmit"
   },

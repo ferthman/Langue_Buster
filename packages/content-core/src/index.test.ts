@@ -78,7 +78,7 @@ describe('phase 5 content schemas', () => {
 
     const invalidBundle = createValidBundle();
     invalidBundle.levels[0] = {
-      ...invalidBundle.levels[0]!,
+      ...invalidBundle.levels[0],
       lessonIds: ['lesson.missing'],
     };
 

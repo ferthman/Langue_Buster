@@ -166,15 +166,16 @@ export function createContentAdminRepository(client: DatabaseClient) {
         client,
         `
           SELECT
-            vocab.*,
-            (
-              SELECT COUNT(*)
-              FROM content_qa_flags flags
-              WHERE flags.entity_type = 'vocab_item'
-                AND flags.entity_id = vocab.id
-                AND flags.status = 'active'
-            )::INTEGER AS open_flag_count
-          FROM content_vocab_items vocab
+            content_vocab_items.*,
+            COALESCE(flag_counts.open_flag_count, 0)::INTEGER AS open_flag_count
+          FROM content_vocab_items
+          LEFT JOIN (
+            SELECT entity_id, COUNT(*)::INTEGER AS open_flag_count
+            FROM content_qa_flags
+            WHERE entity_type = 'vocab_item' AND status = 'active'
+            GROUP BY entity_id
+          ) AS flag_counts
+            ON flag_counts.entity_id = content_vocab_items.id
           ${whereClause}
           ORDER BY ${sortColumn} ${sortDirection}, id ASC
           LIMIT $${values.length - 1}
