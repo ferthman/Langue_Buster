@@ -172,6 +172,9 @@ label,
 .status-badge.on_review { background: #fff0c2; color: #854d0e; }
 .status-badge.draft { background: #e6edf7; color: #1d4ed8; }
 .status-badge.archived { background: #f0e5dc; color: #7c2d12; }
+.status-badge.severity-low { background: #e6edf7; color: #1d4ed8; }
+.status-badge.severity-medium { background: #fff0c2; color: #854d0e; }
+.status-badge.severity-high { background: #fee4e2; color: #991b1b; }
 
 .primary-button,
 .secondary-button {

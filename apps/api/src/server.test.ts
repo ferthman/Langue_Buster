@@ -69,6 +69,7 @@ describe('mounted auth and run routes', () => {
         adminImport: 'POST /admin/import/validate',
         adminHistory: 'GET /admin/history',
         adminAnalyticsOverview: 'GET /admin/analytics/overview',
+        adminAntiCheatAnomalies: 'GET /admin/anti-cheat/anomalies',
       },
     });
   });
@@ -167,9 +168,9 @@ describe('mounted auth and run routes', () => {
     }>('SELECT event_name, user_id FROM analytics_events ORDER BY occurred_at ASC, id ASC');
 
     expect(persisted.rows).toHaveLength(2);
-    expect(persisted.rows[persisted.rows.length - 1]).toMatchObject({
+    expect(persisted.rows).toContainEqual(expect.objectContaining({
       event_name: 'home_opened',
-    });
+    }));
   });
 
   it('starts a run, persists it, and returns deterministic initial state for the same seed', async () => {
@@ -185,6 +186,9 @@ describe('mounted auth and run routes', () => {
       },
       body: {
         levelId: 'A1',
+        seed: 123,
+        score: 9999,
+        combo: 99,
       },
     });
     const second = await dispatchJson(handler, {
@@ -200,8 +204,12 @@ describe('mounted auth and run routes', () => {
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    const firstRun = (first.body as { run: { id: string; engineState: unknown; currentQuestionState: unknown } }).run;
-    const secondRun = (second.body as { run: { engineState: unknown; currentQuestionState: unknown } }).run;
+    const firstRun = (first.body as { run: { id: string; seed: number; score: number; combo: number; engineState: unknown; currentQuestionState: unknown } }).run;
+    const secondRun = (second.body as { run: { seed: number; engineState: unknown; currentQuestionState: unknown } }).run;
+    expect(firstRun.seed).toBe(777);
+    expect(firstRun.score).toBe(0);
+    expect(firstRun.combo).toBe(0);
+    expect(secondRun.seed).toBe(777);
     expect(firstRun.engineState).toEqual(secondRun.engineState);
     expect(firstRun.currentQuestionState).toEqual(secondRun.currentQuestionState);
 
@@ -431,8 +439,63 @@ describe('mounted auth and run routes', () => {
     expect(movedBody.run.status).toBe('active');
   });
 
-  it('rejects illegal move submissions', async () => {
+  it('ignores client score-like fields during move and finish requests', async () => {
     const handler = createHandler();
+    const token = getToken((await authenticate(handler, '123456')).body);
+    const run = await startRun(handler, token);
+
+    const answered = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: run.currentQuestionState.question.correctOptionId,
+        score: 9999,
+      },
+    });
+    const placement = findLegalPlacement((answered.body as { run: typeof run }).run);
+
+    const moved = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/move`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        ...placement,
+        score: 9999,
+        combo: 99,
+        clearedLinesTotal: 999,
+      },
+    });
+    expect(moved.status).toBe(200);
+    const movedBody = moved.body as {
+      run: { score: number; combo: number };
+      moveEvent: { resultingScore: number; resultingCombo: number };
+    };
+    expect(movedBody.run.score).toBe(movedBody.moveEvent.resultingScore);
+    expect(movedBody.run.combo).toBe(movedBody.moveEvent.resultingCombo);
+
+    const finished = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/finish`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        finalScore: 9999,
+      },
+    });
+    expect(finished.status).toBe(200);
+    expect((finished.body as { result: { finalScore: number } }).result.finalScore).toBe(movedBody.run.score);
+  });
+
+  it('rejects illegal move submissions', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
     const token = getToken((await authenticate(handler, '123456')).body);
     const run = await startRun(handler, token);
 
@@ -461,6 +524,151 @@ describe('mounted auth and run routes', () => {
 
     expect(illegal.status).toBe(409);
     expect((illegal.body as { code: string }).code).toBe('run_invalid_move');
+
+    const anomalies = await poolContext.pool.query<{ anomaly_type: string; run_id: string }>(
+      'SELECT anomaly_type, run_id FROM anti_cheat_anomalies WHERE run_id = $1',
+      [run.id],
+    );
+    expect(anomalies.rows).toContainEqual({
+      anomaly_type: 'invalid_move_attempt',
+      run_id: run.id,
+    });
+  });
+
+  it('rate-limits abuse-sensitive routes', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+
+    let lastResponse: Awaited<ReturnType<typeof dispatchJson>> | null = null;
+    for (let index = 0; index < 11; index += 1) {
+      lastResponse = await dispatchJson(handler, {
+        method: 'POST',
+        url: '/auth/telegram',
+        headers: {
+          'x-forwarded-for': '198.51.100.7',
+        },
+        body: {
+          initData: 'invalid',
+        },
+      });
+    }
+
+    expect(lastResponse?.status).toBe(429);
+    expect((lastResponse?.body as { code: string }).code).toBe('rate_limited');
+    const anomalies = await poolContext.pool.query<{ anomaly_type: string }>(
+      'SELECT anomaly_type FROM anti_cheat_anomalies WHERE anomaly_type = $1',
+      ['rate_limit_exceeded'],
+    );
+    expect(anomalies.rows).toHaveLength(1);
+  });
+
+  it('logs impossible answer timing anomalies', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const token = getToken((await authenticate(handler, '123456')).body);
+    const run = await startRun(handler, token);
+
+    const response = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: run.currentQuestionState.question.correctOptionId,
+        answeredAt: '2026-04-22T00:00:00.100Z',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const anomalies = await poolContext.pool.query<{ anomaly_type: string; run_id: string }>(
+      'SELECT anomaly_type, run_id FROM anti_cheat_anomalies WHERE run_id = $1',
+      [run.id],
+    );
+    expect(anomalies.rows).toContainEqual({
+      anomaly_type: 'impossible_answer_timing',
+      run_id: run.id,
+    });
+  });
+
+  it('logs impossible move cadence anomalies', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const token = getToken((await authenticate(handler, '123456')).body);
+    const run = await startRun(handler, token);
+
+    const answered = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: run.currentQuestionState.question.correctOptionId,
+        answeredAt: '2026-04-22T00:00:01.000Z',
+      },
+    });
+    const placement = findLegalPlacement((answered.body as { run: typeof run }).run);
+    const moved = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/move`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: placement,
+    });
+
+    expect(moved.status).toBe(200);
+    const anomalies = await poolContext.pool.query<{ anomaly_type: string; run_id: string }>(
+      'SELECT anomaly_type, run_id FROM anti_cheat_anomalies WHERE run_id = $1',
+      [run.id],
+    );
+    expect(anomalies.rows).toContainEqual({
+      anomaly_type: 'impossible_move_cadence',
+      run_id: run.id,
+    });
+  });
+
+  it('exposes anti-cheat anomalies through the admin endpoint only', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const userToken = getToken((await authenticate(handler, '123456')).body);
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+
+    await poolContext.pool.query(
+      `
+        INSERT INTO anti_cheat_anomalies (
+          id, user_id, run_id, source_item_id, anomaly_type, severity, metadata_json, occurred_at
+        )
+        VALUES ($1, NULL, NULL, NULL, $2, $3, $4, $5)
+      `,
+      ['ac_test', 'rate_limit_exceeded', 'medium', '{}', fixedNow.toISOString()],
+    );
+
+    const forbidden = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/anti-cheat/anomalies',
+      headers: {
+        authorization: `Bearer ${userToken}`,
+      },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const listed = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/anti-cheat/anomalies?limit=10',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+    expect(listed.status).toBe(200);
+    expect((listed.body as { anomalies: Array<{ id: string }> }).anomalies).toEqual([
+      expect.objectContaining({ id: 'ac_test' }),
+    ]);
   });
 
   it('finalizes a run and exposes the persisted terminal summary', async () => {

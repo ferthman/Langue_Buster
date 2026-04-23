@@ -692,3 +692,50 @@ export const adminErrorSchema = z.object({
   message: z.string().min(1),
 });
 export type AdminError = z.infer<typeof adminErrorSchema>;
+
+export const antiCheatAnomalyTypeSchema = z.enum([
+  'rate_limit_exceeded',
+  'impossible_answer_timing',
+  'impossible_move_cadence',
+  'ultra_fast_correct_streak',
+  'suspicious_perfect_run',
+  'invalid_move_attempt',
+  'run_integrity_mismatch',
+]);
+export type AntiCheatAnomalyType = z.infer<typeof antiCheatAnomalyTypeSchema>;
+
+export const antiCheatSeveritySchema = z.enum(['low', 'medium', 'high']);
+export type AntiCheatSeverity = z.infer<typeof antiCheatSeveritySchema>;
+
+export const antiCheatAnomalySchema = z.object({
+  id: z.string().trim().min(1),
+  userId: z.string().trim().min(1).optional(),
+  runId: z.string().trim().min(1).optional(),
+  sourceItemId: z.string().trim().min(1).optional(),
+  type: antiCheatAnomalyTypeSchema,
+  severity: antiCheatSeveritySchema,
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  occurredAt: z.string().datetime(),
+});
+export type AntiCheatAnomaly = z.infer<typeof antiCheatAnomalySchema>;
+
+export const antiCheatAnomalyListQuerySchema = z.object({
+  userId: z.string().trim().min(1).optional(),
+  runId: z.string().trim().min(1).optional(),
+  type: antiCheatAnomalyTypeSchema.optional(),
+  severity: antiCheatSeveritySchema.optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+export type AntiCheatAnomalyListQuery = z.infer<typeof antiCheatAnomalyListQuerySchema>;
+
+export const antiCheatAnomalyListResponseSchema = z.object({
+  anomalies: z.array(antiCheatAnomalySchema),
+});
+export type AntiCheatAnomalyListResponse = z.infer<typeof antiCheatAnomalyListResponseSchema>;
+
+export const rateLimitedErrorSchema = z.object({
+  code: z.literal('rate_limited'),
+  message: z.string().trim().min(1),
+  retryAfterSeconds: z.number().int().positive(),
+});
+export type RateLimitedError = z.infer<typeof rateLimitedErrorSchema>;

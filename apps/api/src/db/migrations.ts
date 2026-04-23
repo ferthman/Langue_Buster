@@ -262,6 +262,30 @@ const phase7SchemaStatements = [
   `
     CREATE INDEX IF NOT EXISTS analytics_events_source_item_id_idx ON analytics_events (source_item_id)
   `,
+  `
+    CREATE TABLE IF NOT EXISTS anti_cheat_anomalies (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users (id),
+      run_id TEXT REFERENCES run_sessions (id),
+      source_item_id TEXT,
+      anomaly_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      metadata_json TEXT NOT NULL,
+      occurred_at TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS anti_cheat_anomalies_user_id_idx ON anti_cheat_anomalies (user_id)
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS anti_cheat_anomalies_run_id_idx ON anti_cheat_anomalies (run_id)
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS anti_cheat_anomalies_type_idx ON anti_cheat_anomalies (anomaly_type)
+  `,
+  `
+    CREATE INDEX IF NOT EXISTS anti_cheat_anomalies_occurred_at_idx ON anti_cheat_anomalies (occurred_at)
+  `,
 ] as const;
 
 export async function migratePhase7Schema(client: Pick<DatabaseClient, 'query'>): Promise<void> {

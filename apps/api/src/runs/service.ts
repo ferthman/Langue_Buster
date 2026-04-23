@@ -55,6 +55,39 @@ type RunServiceDependencies = {
   errorReporter?: {
     captureError(error: unknown, context: Record<string, unknown>): void;
   };
+  antiCheat?: {
+    recordAnomaly(input: {
+      userId?: string;
+      runId?: string;
+      sourceItemId?: string;
+      type:
+        | 'rate_limit_exceeded'
+        | 'impossible_answer_timing'
+        | 'impossible_move_cadence'
+        | 'ultra_fast_correct_streak'
+        | 'suspicious_perfect_run'
+        | 'invalid_move_attempt'
+        | 'run_integrity_mismatch';
+      severity: 'low' | 'medium' | 'high';
+      metadata?: Record<string, unknown>;
+      occurredAt?: string;
+    }): Promise<unknown>;
+    inspectAnswer(input: {
+      run: RunSession;
+      answerEvent: AnswerEvent;
+      shownAt: string;
+      answeredAt?: string;
+    }): Promise<unknown>;
+    inspectMoveCadence(input: {
+      run: RunSession;
+      moveEvent: MoveEvent;
+      unlockedAt?: string;
+    }): Promise<unknown>;
+    inspectRunResult(input: {
+      run: RunSession;
+      result: RunResult;
+    }): Promise<unknown>;
+  };
 };
 
 export type RunService = ReturnType<typeof createRunService>;
@@ -183,6 +216,12 @@ export function createRunService(dependencies: RunServiceDependencies) {
         occurredAt,
       };
       await dependencies.answerEventRepository.save(answerEvent);
+      await dependencies.antiCheat?.inspectAnswer({
+        run,
+        answerEvent,
+        shownAt: questionState.shownAt,
+        answeredAt: input.answeredAt,
+      });
       await dependencies.analytics?.recordEvent({
         eventName: 'answer_submitted',
         source: 'backend',
@@ -334,8 +373,22 @@ export function createRunService(dependencies: RunServiceDependencies) {
 
       let applied;
       try {
-        applied = applyPlacement(run.engineState as GameEngineState, input.trayIndex, input.origin);
+        applied = applyPlacement(run.engineState, input.trayIndex, input.origin);
       } catch (error) {
+        await dependencies.antiCheat?.recordAnomaly({
+          userId: run.userId,
+          runId: run.id,
+          sourceItemId: questionState.question.meta.sourceItemId,
+          type: 'invalid_move_attempt',
+          severity: 'low',
+          occurredAt: now().toISOString(),
+          metadata: {
+            trayIndex: input.trayIndex,
+            origin: input.origin,
+            engineTurn: run.engineState.turn,
+            reason: error instanceof Error ? error.message : 'invalid_move',
+          },
+        });
         await dependencies.analytics?.recordEvent({
           eventName: 'move_rejected',
           source: 'backend',
@@ -388,6 +441,11 @@ export function createRunService(dependencies: RunServiceDependencies) {
         occurredAt,
       };
       await dependencies.moveEventRepository.save(moveEvent);
+      await dependencies.antiCheat?.inspectMoveCadence({
+        run,
+        moveEvent,
+        unlockedAt: questionState.answeredAt,
+      });
       await dependencies.analytics?.recordEvent({
         eventName: 'move_accepted',
         source: 'backend',
@@ -504,7 +562,7 @@ async function finalizeRunInternal(
   run: RunSession,
   dependencies: Pick<
     RunServiceDependencies,
-    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository'
+    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'antiCheat'
   >,
   now: () => Date,
 ): Promise<RunResult> {
@@ -519,13 +577,55 @@ async function finalizeRunInternal(
 
   const answerEvents = await dependencies.answerEventRepository.findByRunId(run.id);
   const moveEvents = await dependencies.moveEventRepository.findByRunId(run.id);
-  const totals = recomputeRunTotals(run, moveEvents);
+  let totals;
+  try {
+    totals = recomputeRunTotals(run, moveEvents);
+  } catch (error) {
+    await dependencies.antiCheat?.recordAnomaly({
+      userId: run.userId,
+      runId: run.id,
+      type: 'run_integrity_mismatch',
+      severity: 'high',
+      occurredAt: now().toISOString(),
+      metadata: {
+        reason: error instanceof Error ? error.message : 'run_integrity_error',
+        storedScore: run.score,
+        storedCombo: run.combo,
+        moveCount: moveEvents.length,
+      },
+    });
+    throw error;
+  }
 
   if (answerEvents.filter((event) => event.correctness).length !== run.correctCount) {
+    await dependencies.antiCheat?.recordAnomaly({
+      userId: run.userId,
+      runId: run.id,
+      type: 'run_integrity_mismatch',
+      severity: 'high',
+      occurredAt: now().toISOString(),
+      metadata: {
+        reason: 'correct_answer_count_mismatch',
+        storedCorrectCount: run.correctCount,
+        persistedCorrectCount: answerEvents.filter((event) => event.correctness).length,
+      },
+    });
     throw new RunDomainError('run_integrity_error', 'Correct answer count does not match persisted answer events.');
   }
 
   if (answerEvents.filter((event) => !event.correctness).length !== run.wrongCount) {
+    await dependencies.antiCheat?.recordAnomaly({
+      userId: run.userId,
+      runId: run.id,
+      type: 'run_integrity_mismatch',
+      severity: 'high',
+      occurredAt: now().toISOString(),
+      metadata: {
+        reason: 'wrong_answer_count_mismatch',
+        storedWrongCount: run.wrongCount,
+        persistedWrongCount: answerEvents.filter((event) => !event.correctness).length,
+      },
+    });
     throw new RunDomainError('run_integrity_error', 'Wrong answer count does not match persisted answer events.');
   }
 
@@ -555,7 +655,7 @@ async function finalizeRunWithMastery(
   run: RunSession,
   dependencies: Pick<
     RunServiceDependencies,
-    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'masteryUpdater' | 'analytics'
+    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'masteryUpdater' | 'analytics' | 'antiCheat'
   >,
   now: () => Date,
 ): Promise<RunResult> {
@@ -563,6 +663,10 @@ async function finalizeRunWithMastery(
   const result = await finalizeRunInternal(run, dependencies, now);
   if (!existing) {
     await recordRunFinished(dependencies, run, result);
+    await dependencies.antiCheat?.inspectRunResult({
+      run,
+      result,
+    });
   }
   return ensureMasteryApplied(run.id, result, dependencies);
 }

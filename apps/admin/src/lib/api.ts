@@ -3,6 +3,8 @@ import type {
   AnalyticsFunnelsResponse,
   AnalyticsOverviewResponse,
   AnalyticsRetentionResponse,
+  AntiCheatAnomalyListQuery,
+  AntiCheatAnomalyListResponse,
   AdminBulkUpdateVocabItemsRequest,
   AdminBulkUpdateVocabItemsResponse,
   AdminHistoryQuery,
@@ -34,6 +36,8 @@ import {
   analyticsFunnelsResponseSchema,
   analyticsOverviewResponseSchema,
   analyticsRetentionResponseSchema,
+  antiCheatAnomalyListQuerySchema,
+  antiCheatAnomalyListResponseSchema,
   adminHistoryQuerySchema,
   adminHistoryResponseSchema,
   adminImportApplyResponseSchema,
@@ -371,6 +375,33 @@ export const adminApi = {
       responseSchema: analyticsRetentionResponseSchema,
       errorSchemas: [adminErrorSchema, authErrorSchema],
       fallbackErrorMessage: 'Не удалось загрузить retention.',
+    });
+  },
+
+  listAntiCheatAnomalies(token: string, query: Partial<AntiCheatAnomalyListQuery>) {
+    const parsed = antiCheatAnomalyListQuerySchema.parse(query);
+    const search = new URLSearchParams();
+    if (parsed.userId) {
+      search.set('userId', parsed.userId);
+    }
+    if (parsed.runId) {
+      search.set('runId', parsed.runId);
+    }
+    if (parsed.type) {
+      search.set('type', parsed.type);
+    }
+    if (parsed.severity) {
+      search.set('severity', parsed.severity);
+    }
+    search.set('limit', String(parsed.limit));
+
+    return request<AntiCheatAnomalyListResponse>({
+      path: `/admin/anti-cheat/anomalies?${search.toString()}`,
+      method: 'GET',
+      token,
+      responseSchema: antiCheatAnomalyListResponseSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить anti-cheat события.',
     });
   },
 };

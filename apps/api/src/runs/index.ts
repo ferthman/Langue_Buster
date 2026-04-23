@@ -22,6 +22,7 @@ type CreateRunModuleOptions = {
   errorReporter?: {
     captureError(error: unknown, context: Record<string, unknown>): void;
   };
+  antiCheat?: Parameters<typeof createRunService>[0]['antiCheat'];
 };
 
 export function createRunModule(options: CreateRunModuleOptions) {
@@ -41,6 +42,7 @@ export function createRunModule(options: CreateRunModuleOptions) {
     analytics: options.analytics,
     logger: options.logger,
     errorReporter: options.errorReporter,
+    antiCheat: options.antiCheat,
   });
 
   return {

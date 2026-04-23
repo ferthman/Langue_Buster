@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   analyticsEventEnvelopeSchema,
   analyticsOverviewResponseSchema,
+  antiCheatAnomalyListResponseSchema,
+  antiCheatAnomalySchema,
   launchLevels,
+  rateLimitedErrorSchema,
   reviewQueueItemSchema,
   runResultSchema,
   runSessionSchema,
@@ -185,6 +188,45 @@ describe('shared domain contracts', () => {
           answerAccuracy: 0.75,
           lessonCompletionCount: 0,
         },
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates anti-cheat anomaly and rate-limit payloads', () => {
+    expect(() =>
+      antiCheatAnomalySchema.parse({
+        id: 'ac_1',
+        userId: 'usr_1',
+        runId: 'run_1',
+        sourceItemId: 'vocab.apple',
+        type: 'impossible_answer_timing',
+        severity: 'medium',
+        metadata: {
+          timingMs: 120,
+        },
+        occurredAt: '2026-04-22T00:00:00.000Z',
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      antiCheatAnomalyListResponseSchema.parse({
+        anomalies: [
+          {
+            id: 'ac_1',
+            type: 'rate_limit_exceeded',
+            severity: 'low',
+            metadata: {},
+            occurredAt: '2026-04-22T00:00:00.000Z',
+          },
+        ],
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      rateLimitedErrorSchema.parse({
+        code: 'rate_limited',
+        message: 'Too many requests.',
+        retryAfterSeconds: 60,
       }),
     ).not.toThrow();
   });

@@ -4,12 +4,22 @@ import {
 } from 'node:http';
 import { URL } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { rateLimitedErrorSchema } from '@langue-buster/shared';
 
 import { createAnalyticsModule } from './analytics/index.js';
 import { createUnavailableAnalyticsController, type AnalyticsController } from './analytics/controller.js';
 import { createErrorReporter } from './analytics/error-reporter.js';
 import { createStructuredLogger } from './analytics/logger.js';
 import { PostgresAnalyticsEventRepository } from './analytics/repository.js';
+import { createAntiCheatModule } from './anti-cheat/index.js';
+import { createUnavailableAntiCheatController, type AntiCheatController } from './anti-cheat/controller.js';
+import {
+  buildRateLimitIdentity,
+  createFixedWindowRateLimiter,
+  type RateLimitRule,
+  type RateLimiter,
+} from './anti-cheat/rate-limit.js';
+import type { AntiCheatService } from './anti-cheat/service.js';
 import { PostgresUserMasteryRepository } from './mastery/repositories.js';
 import { createAuthModule, createPostgresAuthRepositories } from './auth/index.js';
 import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
@@ -22,7 +32,7 @@ import { createUnavailableMasteryController, type MasteryController } from './ma
 import { createRunContentRepository } from './runs/content.js';
 import { createRunModule } from './runs/index.js';
 import { createUnavailableRunController, type RunController } from './runs/controller.js';
-import { PostgresAnswerEventRepository, PostgresRunResultRepository } from './runs/repositories.js';
+import { PostgresAnswerEventRepository, PostgresMoveEventRepository, PostgresRunResultRepository } from './runs/repositories.js';
 import { createContentAdminModule } from './content-admin/index.js';
 import { createUnavailableContentAdminController, type ContentAdminController } from './content-admin/controller.js';
 
@@ -64,7 +74,10 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
       masteryController: modules.masteryController,
       contentAdminController: modules.contentAdminController,
       analyticsController: modules.analyticsController,
+      antiCheatController: modules.antiCheatController,
       authConfigured,
+      rateLimiter: modules.rateLimiter,
+      antiCheatService: modules.antiCheatService,
       allowedOrigins: [options.env.MINIAPP_BASE_URL, options.env.ADMIN_BASE_URL]
         .map((origin) => origin?.trim())
         .filter((origin): origin is string => Boolean(origin)),
@@ -112,6 +125,9 @@ function createApiModules(
   masteryController: MasteryController;
   contentAdminController: ContentAdminController;
   analyticsController: AnalyticsController;
+  antiCheatController: AntiCheatController;
+  rateLimiter: RateLimiter;
+  antiCheatService?: AntiCheatService;
   logger: ReturnType<typeof createAnalyticsModule>['logger'];
   errorReporter: ReturnType<typeof createAnalyticsModule>['errorReporter'];
 } {
@@ -142,8 +158,19 @@ function createApiModules(
     });
     const runRepositories = {
       answerEventRepository: new PostgresAnswerEventRepository(client),
+      moveEventRepository: new PostgresMoveEventRepository(client),
       runResultRepository: new PostgresRunResultRepository(client),
     };
+    const antiCheatModule = createAntiCheatModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      env: options.env,
+      answerEventRepository: runRepositories.answerEventRepository,
+      moveEventRepository: runRepositories.moveEventRepository,
+      now: options.now,
+      logger,
+      errorReporter,
+    });
     const contentRepository = createRunContentRepository();
     const masteryModule = createMasteryModule({
       client,
@@ -165,6 +192,7 @@ function createApiModules(
       analytics: analyticsTracker,
       logger,
       errorReporter,
+      antiCheat: antiCheatModule.service,
     });
     const contentAdminModule = createContentAdminModule({
       client,
@@ -190,6 +218,9 @@ function createApiModules(
       masteryController: masteryModule.controller,
       contentAdminController: contentAdminModule.controller,
       analyticsController: analyticsModule.controller,
+      antiCheatController: antiCheatModule.controller,
+      rateLimiter: antiCheatModule.rateLimiter,
+      antiCheatService: antiCheatModule.service,
       logger,
       errorReporter,
     };
@@ -205,6 +236,8 @@ function createApiModules(
       masteryController: createUnavailableMasteryController(message),
       contentAdminController: createUnavailableContentAdminController(message),
       analyticsController: createUnavailableAnalyticsController(message),
+      antiCheatController: createUnavailableAntiCheatController(message),
+      rateLimiter: createFixedWindowRateLimiter({ now: options.now }),
       logger,
       errorReporter,
     };
@@ -220,7 +253,10 @@ async function routeRequest(
     masteryController: MasteryController;
     contentAdminController: ContentAdminController;
     analyticsController: AnalyticsController;
+    antiCheatController: AntiCheatController;
     authConfigured: boolean;
+    rateLimiter: RateLimiter;
+    antiCheatService?: AntiCheatService;
     allowedOrigins: readonly string[];
     requestId: string;
   },
@@ -245,6 +281,35 @@ async function routeRequest(
     typeof authorization === 'string' ? authorization : authorization?.[0];
   const runRoute = url.pathname.match(/^\/runs\/([^/]+)(?:\/(result|answer|move|finish))?$/);
 
+  const rateLimitRule = resolveRateLimitRule(method, url.pathname, runRoute?.[1]);
+  if (rateLimitRule) {
+    const decision = options.rateLimiter.check({
+      rule: rateLimitRule.rule,
+      identity: buildRateLimitIdentity({
+        authorizationHeader,
+        ipAddress: getRequestIp(request.headers),
+        routeScopedId: rateLimitRule.routeScopedId,
+      }),
+    });
+    if (!decision.allowed) {
+      await options.antiCheatService?.recordAnomaly({
+        type: 'rate_limit_exceeded',
+        severity: 'medium',
+        metadata: {
+          routeId: rateLimitRule.rule.routeId,
+          retryAfterSeconds: decision.retryAfterSeconds,
+          routeScopedId: rateLimitRule.routeScopedId,
+        },
+      });
+      sendJson(response, 429, rateLimitedErrorSchema.parse({
+        code: 'rate_limited',
+        message: 'Too many requests. Please retry shortly.',
+        retryAfterSeconds: decision.retryAfterSeconds,
+      }));
+      return;
+    }
+  }
+
   if (method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
     sendJson(response, 200, {
       status: 'ok',
@@ -266,6 +331,7 @@ async function routeRequest(
         adminImport: 'POST /admin/import/validate',
         adminHistory: 'GET /admin/history',
         adminAnalyticsOverview: 'GET /admin/analytics/overview',
+        adminAntiCheatAnomalies: 'GET /admin/anti-cheat/anomalies',
       },
     });
     return;
@@ -334,6 +400,15 @@ async function routeRequest(
 
   if (method === 'GET' && url.pathname === '/admin/analytics/retention') {
     const result = await options.analyticsController.handleRetention(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/anti-cheat/anomalies') {
+    const result = await options.antiCheatController.handleListAnomalies(
+      Object.fromEntries(url.searchParams.entries()),
+      authorizationHeader,
+    );
     sendJson(response, result.status, result.body);
     return;
   }
@@ -553,4 +628,77 @@ function requireBotToken(env: Record<string, string | undefined>): string {
   }
 
   return botToken;
+}
+
+function resolveRateLimitRule(
+  method: string,
+  pathname: string,
+  runId: string | undefined,
+): { rule: RateLimitRule; routeScopedId?: string } | null {
+  if (method === 'POST' && pathname === '/auth/telegram') {
+    return {
+      rule: {
+        routeId: 'POST /auth/telegram',
+        limit: 10,
+        windowMs: 60_000,
+      },
+    };
+  }
+
+  if (method === 'POST' && pathname === '/review/answer') {
+    return {
+      rule: {
+        routeId: 'POST /review/answer',
+        limit: 60,
+        windowMs: 60_000,
+      },
+    };
+  }
+
+  if (method === 'POST' && pathname === '/analytics/events') {
+    return {
+      rule: {
+        routeId: 'POST /analytics/events',
+        limit: 120,
+        windowMs: 60_000,
+      },
+    };
+  }
+
+  if (method === 'POST' && runId && pathname === `/runs/${runId}/answer`) {
+    return {
+      rule: {
+        routeId: 'POST /runs/:runId/answer',
+        limit: 60,
+        windowMs: 60_000,
+      },
+      routeScopedId: runId,
+    };
+  }
+
+  if (method === 'POST' && runId && pathname === `/runs/${runId}/move`) {
+    return {
+      rule: {
+        routeId: 'POST /runs/:runId/move',
+        limit: 60,
+        windowMs: 60_000,
+      },
+      routeScopedId: runId,
+    };
+  }
+
+  return null;
+}
+
+function getRequestIp(headers: ApiRequest['headers']): string {
+  const forwarded = firstHeaderValue(headers['x-forwarded-for']);
+  if (forwarded) {
+    return forwarded.split(',')[0]?.trim() || 'unknown';
+  }
+
+  return firstHeaderValue(headers['x-real-ip']) ?? 'unknown';
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : value?.[0];
 }
