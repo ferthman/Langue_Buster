@@ -1,4 +1,5 @@
 import type {
+  AnalyticsEventEnvelope,
   AuthResponse,
   TelegramAuthRequest,
   AuthError,
@@ -20,6 +21,9 @@ type AuthServiceDependencies = {
   now?: () => Date;
   sessionTtlSeconds?: number;
   maxAuthAgeSeconds?: number;
+  analytics?: {
+    recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+  };
 };
 
 export type AuthService = ReturnType<typeof createAuthService>;
@@ -44,6 +48,17 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
         ttlSeconds: dependencies.sessionTtlSeconds,
       });
       const storedSession = await dependencies.sessionRepository.save(session);
+      await dependencies.analytics?.recordEvent({
+        eventName: 'auth_bootstrap_succeeded',
+        source: 'backend',
+        occurredAt: storedSession.issuedAt,
+        userId: internalUser.id,
+        sessionId: storedSession.id,
+        payload: {
+          method: 'telegram_auth',
+          route: '/auth/telegram',
+        },
+      });
 
       return authResponseSchema.parse({
         user: internalUser,

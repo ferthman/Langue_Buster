@@ -1,5 +1,8 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { trackAnalyticsEvent } from '../analytics/client';
+import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
 
 const steps = [
@@ -20,6 +23,20 @@ const steps = [
 export function OnboardingScreen() {
   const navigate = useNavigate();
   const preferences = usePreferences();
+  const auth = useAuth();
+  const token = auth.status === 'authenticated' ? auth.token : null;
+
+  useEffect(() => {
+    void trackAnalyticsEvent(token, {
+      eventName: 'onboarding_started',
+      occurredAt: new Date().toISOString(),
+      userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+      sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+      payload: {
+        route: '/onboarding',
+      },
+    });
+  }, [auth, token]);
 
   return (
     <main className="screen">
@@ -42,6 +59,15 @@ export function OnboardingScreen() {
         className="primary-button"
         onClick={() => {
           preferences.setOnboardingSeen(true);
+          void trackAnalyticsEvent(token, {
+            eventName: 'onboarding_completed',
+            occurredAt: new Date().toISOString(),
+            userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+            sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+            payload: {
+              route: '/onboarding',
+            },
+          });
           void navigate('/placement');
         }}
       >

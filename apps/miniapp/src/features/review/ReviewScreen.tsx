@@ -2,6 +2,7 @@ import type { ReviewAnswerResponse, ReviewQueueItem } from '@langue-buster/share
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiClient, ApiClientError } from '../api/client';
+import { trackAnalyticsEvent } from '../analytics/client';
 import { describeError } from '../api/errors';
 import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
@@ -41,6 +42,19 @@ export function ReviewScreen() {
       setSelectedOptionId(undefined);
     } catch (loadError) {
       setError(describeError(loadError));
+      void trackAnalyticsEvent(token, {
+        eventName: 'user_visible_failure',
+        occurredAt: new Date().toISOString(),
+        userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+        sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+        levelId: focusLevel ?? undefined,
+        payload: {
+          route: '/review',
+          screen: 'review',
+          code: loadError instanceof ApiClientError ? loadError.code : 'review_load_failed',
+          message: describeError(loadError),
+        },
+      });
     } finally {
       setPending(false);
     }
@@ -49,6 +63,24 @@ export function ReviewScreen() {
   useEffect(() => {
     void loadQueue();
   }, [focusLevel, loadQueue]);
+
+  useEffect(() => {
+    if (!token || auth.status !== 'authenticated') {
+      return;
+    }
+
+    void trackAnalyticsEvent(token, {
+      eventName: 'review_screen_opened',
+      occurredAt: new Date().toISOString(),
+      userId: auth.user.id,
+      sessionId: auth.session.id,
+      levelId: focusLevel ?? undefined,
+      payload: {
+        route: '/review',
+        focusLevel: focusLevel ?? undefined,
+      },
+    });
+  }, [auth, focusLevel, token]);
 
   if (auth.status !== 'authenticated') {
     return null;
@@ -80,6 +112,17 @@ export function ReviewScreen() {
       }
     } catch (answerError) {
       if (answerError instanceof ApiClientError && answerError.code === 'review_question_mismatch') {
+        void trackAnalyticsEvent(token, {
+          eventName: 'retry_clicked',
+          occurredAt: new Date().toISOString(),
+          userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+          sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+          payload: {
+            route: '/review',
+            screen: 'review',
+            target: 'review_queue_reload',
+          },
+        });
         await loadQueue();
         return;
       }

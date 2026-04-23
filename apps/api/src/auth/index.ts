@@ -19,6 +19,15 @@ type CreateAuthModuleOptions = {
   maxAuthAgeSeconds?: number;
   userRepository?: UserRepository;
   sessionRepository?: SessionRepository;
+  analytics?: {
+    recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  logger?: {
+    warn(message: string, context: Record<string, unknown>): void;
+  };
+  errorReporter?: {
+    captureError(error: unknown, context: Record<string, unknown>): void;
+  };
 };
 
 export function createAuthModule(options: CreateAuthModuleOptions) {
@@ -32,6 +41,7 @@ export function createAuthModule(options: CreateAuthModuleOptions) {
     now: options.now,
     sessionTtlSeconds: options.sessionTtlSeconds,
     maxAuthAgeSeconds: options.maxAuthAgeSeconds,
+    analytics: options.analytics,
   });
   const sessionVerifier = createSessionVerifier({
     userRepository,
@@ -40,7 +50,11 @@ export function createAuthModule(options: CreateAuthModuleOptions) {
   });
 
   return {
-    controller: createAuthController(authService, sessionVerifier),
+    controller: createAuthController(authService, sessionVerifier, {
+      analytics: options.analytics,
+      logger: options.logger,
+      errorReporter: options.errorReporter,
+    }),
     service: authService,
     sessionVerifier,
     repositories: {

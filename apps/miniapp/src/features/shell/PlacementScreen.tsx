@@ -1,7 +1,9 @@
 import type { LaunchLevelId } from '@langue-buster/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { trackAnalyticsEvent } from '../analytics/client';
+import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
 
 const levels: Array<{ id: LaunchLevelId; title: string; description: string }> = [
@@ -20,8 +22,23 @@ const levels: Array<{ id: LaunchLevelId; title: string; description: string }> =
 export function PlacementScreen() {
   const navigate = useNavigate();
   const preferences = usePreferences();
+  const auth = useAuth();
   const focusLevel = preferences.focusLevel;
   const [selectedLevel, setSelectedLevel] = useState<LaunchLevelId>(focusLevel ?? 'A1');
+  const token = auth.status === 'authenticated' ? auth.token : null;
+
+  useEffect(() => {
+    void trackAnalyticsEvent(token, {
+      eventName: 'placement_started',
+      occurredAt: new Date().toISOString(),
+      userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+      sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+      payload: {
+        route: '/placement',
+        focusLevel: focusLevel ?? undefined,
+      },
+    });
+  }, [auth, focusLevel, token]);
 
   return (
     <main className="screen">
@@ -36,7 +53,20 @@ export function PlacementScreen() {
           key={level.id}
           type="button"
           className={selectedLevel === level.id ? 'choice-card is-selected' : 'choice-card'}
-          onClick={() => setSelectedLevel(level.id)}
+          onClick={() => {
+            setSelectedLevel(level.id);
+            void trackAnalyticsEvent(token, {
+              eventName: 'level_selected',
+              occurredAt: new Date().toISOString(),
+              userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+              sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+              levelId: level.id,
+              payload: {
+                selectedLevelId: level.id,
+                route: '/placement',
+              },
+            });
+          }}
         >
           <strong>{level.title}</strong>
           <span>{level.description}</span>
@@ -48,6 +78,17 @@ export function PlacementScreen() {
         className="primary-button"
         onClick={() => {
           preferences.setFocusLevel(selectedLevel);
+          void trackAnalyticsEvent(token, {
+            eventName: 'placement_completed',
+            occurredAt: new Date().toISOString(),
+            userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+            sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+            levelId: selectedLevel,
+            payload: {
+              selectedLevelId: selectedLevel,
+              recommendedLevelId: 'A1',
+            },
+          });
           void navigate('/home');
         }}
       >

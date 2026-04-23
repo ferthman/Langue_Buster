@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyticsEventEnvelopeSchema,
+  analyticsOverviewResponseSchema,
   launchLevels,
   reviewQueueItemSchema,
   runResultSchema,
@@ -141,6 +143,48 @@ describe('shared domain contracts', () => {
         lastSeenAt: '2026-04-22T00:00:00.000Z',
         createdAt: '2026-04-22T00:00:00.000Z',
         updatedAt: '2026-04-22T00:00:00.000Z',
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates analytics event envelopes and dashboard payloads', () => {
+    expect(() =>
+      analyticsEventEnvelopeSchema.parse({
+        eventName: 'answer_wrong',
+        source: 'backend',
+        occurredAt: '2026-04-22T00:00:00.000Z',
+        userId: 'usr_1',
+        runId: 'run_1',
+        levelId: 'A1',
+        sourceItemId: 'vocab.apple',
+        topicId: 'topic.food',
+        payload: {
+          questionId: 'question:1',
+          selectedOptionId: 'two',
+          correctOptionId: 'one',
+          cardType: 'single_word_translation',
+          timingMs: 1200,
+          moveUnlocked: false,
+          correctness: false,
+        },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      analyticsOverviewResponseSchema.parse({
+        overview: {
+          onboardingCompletionCount: 10,
+          onboardingCompletionRate: 0.5,
+          firstRunStartCount: 7,
+          firstRunFinishCount: 4,
+          reviewAdoptionCount: 3,
+          reviewAdoptionRate: 0.4,
+          runCompletionCount: 4,
+          runAbandonCount: 2,
+          averageRunLengthSeconds: 42.5,
+          answerAccuracy: 0.75,
+          lessonCompletionCount: 0,
+        },
       }),
     ).not.toThrow();
   });

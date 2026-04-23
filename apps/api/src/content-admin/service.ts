@@ -11,6 +11,7 @@ import {
   type VocabItem,
 } from '@langue-buster/content-core';
 import {
+  type AnalyticsEventEnvelope,
   adminAuditLogEntrySchema,
   adminBulkUpdateVocabItemsResponseSchema,
   adminImportApplyResponseSchema,
@@ -45,6 +46,9 @@ type Actor = Readonly<{
 type ContentAdminServiceDependencies = {
   repository: ContentAdminRepository;
   now?: () => Date;
+  analytics?: {
+    recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+  };
 };
 
 export type ContentAdminService = ReturnType<typeof createContentAdminService>;
@@ -228,6 +232,15 @@ export function createContentAdminService(dependencies: ContentAdminServiceDepen
 
     validateImport(bundle: unknown) {
       const result = validateEditorialImportBundle(bundle);
+      void dependencies.analytics?.recordEvent({
+        eventName: 'admin_import_validated',
+        source: 'backend',
+        occurredAt: now().toISOString(),
+        payload: {
+          success: result.success,
+          issueCount: result.success ? 0 : result.issues.length,
+        },
+      });
       return adminImportValidateResponseSchema.parse(result);
     },
 
@@ -246,6 +259,20 @@ export function createContentAdminService(dependencies: ContentAdminServiceDepen
         throw error;
       }
       await dependencies.repository.applyImport(parsed, actor, now().toISOString());
+      await dependencies.analytics?.recordEvent({
+        eventName: 'admin_import_applied',
+        source: 'backend',
+        occurredAt: now().toISOString(),
+        userId: actor.userId,
+        payload: {
+          success: true,
+          levelsCount: parsed.levels.length,
+          topicsCount: parsed.topics.length,
+          lessonsCount: parsed.lessons.length,
+          vocabItemsCount: parsed.vocabItems.length,
+          distractorSetsCount: parsed.distractorSets.length,
+        },
+      });
 
       return adminImportApplyResponseSchema.parse({
         counts: {

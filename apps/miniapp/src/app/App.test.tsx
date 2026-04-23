@@ -22,9 +22,23 @@ vi.mock('@twa-dev/sdk', () => ({
   },
 }));
 
+vi.mock('../features/analytics/client', () => ({
+  trackAnalyticsEvent: vi.fn().mockResolvedValue(undefined),
+  createClientErrorReporter: () => ({
+    captureError: vi.fn(),
+    captureMessage: vi.fn(),
+  }),
+}));
+
 describe('App bootstrap and routing', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        return Promise.reject(new Error(`Unexpected fetch for ${url}`));
+      }),
+    );
   });
 
   it('uses a valid stored session and redirects to onboarding', async () => {

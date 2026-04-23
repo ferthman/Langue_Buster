@@ -1,4 +1,5 @@
 import type {
+  AnalyticsEventEnvelope,
   AuthError,
   AuthResponse,
   SessionVerificationResponse,
@@ -17,7 +18,21 @@ export type AuthHttpResult = {
 
 export type AuthController = ReturnType<typeof createAuthController>;
 
-export function createAuthController(authService: AuthService, sessionVerifier: SessionVerifier) {
+export function createAuthController(
+  authService: AuthService,
+  sessionVerifier: SessionVerifier,
+  options: {
+    analytics?: {
+      recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+    };
+    logger?: {
+      warn(message: string, context: Record<string, unknown>): void;
+    };
+    errorReporter?: {
+      captureError(error: unknown, context: Record<string, unknown>): void;
+    };
+  } = {},
+) {
   return {
     async handleTelegramAuth(body: unknown): Promise<AuthHttpResult> {
       try {
@@ -30,9 +45,27 @@ export function createAuthController(authService: AuthService, sessionVerifier: 
         };
       } catch (error) {
         const normalizedError = normalizeAuthError(error);
-        console.error('[auth] telegram authentication failed', {
+        options.logger?.warn('Telegram authentication failed.', {
+          domain: 'auth',
           code: normalizedError.code,
           message: normalizedError.message,
+        });
+        options.errorReporter?.captureError(error, {
+          domain: 'auth',
+          code: normalizedError.code,
+          extra: {
+            route: '/auth/telegram',
+          },
+        });
+        await options.analytics?.recordEvent({
+          eventName: 'auth_bootstrap_failed',
+          source: 'backend',
+          occurredAt: new Date().toISOString(),
+          payload: {
+            route: '/auth/telegram',
+            code: normalizedError.code,
+            message: normalizedError.message,
+          },
         });
 
         return {
@@ -46,6 +79,17 @@ export function createAuthController(authService: AuthService, sessionVerifier: 
       try {
         const token = getBearerToken(authorizationHeader);
         const response = await sessionVerifier.verifySessionToken(token);
+        await options.analytics?.recordEvent({
+          eventName: 'auth_bootstrap_succeeded',
+          source: 'backend',
+          occurredAt: response.session.issuedAt,
+          userId: response.user.id,
+          sessionId: response.session.id,
+          payload: {
+            method: 'stored_session',
+            route: '/auth/session',
+          },
+        });
 
         return {
           status: 200,
@@ -53,6 +97,16 @@ export function createAuthController(authService: AuthService, sessionVerifier: 
         };
       } catch (error) {
         const normalizedError = normalizeAuthError(error);
+        await options.analytics?.recordEvent({
+          eventName: 'auth_bootstrap_failed',
+          source: 'backend',
+          occurredAt: new Date().toISOString(),
+          payload: {
+            route: '/auth/session',
+            code: normalizedError.code,
+            message: normalizedError.message,
+          },
+        });
 
         return {
           status: mapSessionErrorStatus(normalizedError),

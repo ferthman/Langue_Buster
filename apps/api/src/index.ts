@@ -116,3 +116,4 @@ export { createAuthModuleFromEnvironment, createApiRequestHandler, createApiServ
 export * from './runs/index.js';
 export * from './mastery/index.js';
 export * from './content-admin/index.js';
+export * from './analytics/index.js';

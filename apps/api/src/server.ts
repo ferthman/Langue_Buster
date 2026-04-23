@@ -3,7 +3,14 @@ import {
   type Server,
 } from 'node:http';
 import { URL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
+import { createAnalyticsModule } from './analytics/index.js';
+import { createUnavailableAnalyticsController, type AnalyticsController } from './analytics/controller.js';
+import { createErrorReporter } from './analytics/error-reporter.js';
+import { createStructuredLogger } from './analytics/logger.js';
+import { PostgresAnalyticsEventRepository } from './analytics/repository.js';
+import { PostgresUserMasteryRepository } from './mastery/repositories.js';
 import { createAuthModule, createPostgresAuthRepositories } from './auth/index.js';
 import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
 import { AuthDomainError } from './auth/errors.js';
@@ -50,16 +57,36 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
 
   return async (request: ApiRequest, response: ApiResponse) => {
     await databaseRuntime.ready;
+    const requestId = `req_${randomUUID()}`;
     await routeRequest(request, response, {
       authController: modules.authController,
       runController: modules.runController,
       masteryController: modules.masteryController,
       contentAdminController: modules.contentAdminController,
+      analyticsController: modules.analyticsController,
       authConfigured,
       allowedOrigins: [options.env.MINIAPP_BASE_URL, options.env.ADMIN_BASE_URL]
         .map((origin) => origin?.trim())
         .filter((origin): origin is string => Boolean(origin)),
-    }).catch(() => {
+      requestId,
+    }).catch((error) => {
+      modules.logger.error('Unhandled API request failure.', {
+        domain: 'http',
+        requestId,
+        extra: {
+          method: request.method,
+          url: request.url,
+          error: error instanceof Error ? error.message : 'Unknown error.',
+        },
+      });
+      modules.errorReporter.captureError(error, {
+        domain: 'http',
+        requestId,
+        extra: {
+          method: request.method,
+          url: request.url,
+        },
+      });
       sendJson(response, 500, {
         code: 'run_unavailable',
         message: 'Internal server error.',
@@ -84,8 +111,21 @@ function createApiModules(
   runController: RunController;
   masteryController: MasteryController;
   contentAdminController: ContentAdminController;
+  analyticsController: AnalyticsController;
+  logger: ReturnType<typeof createAnalyticsModule>['logger'];
+  errorReporter: ReturnType<typeof createAnalyticsModule>['errorReporter'];
 } {
   try {
+    const logger = createStructuredLogger({
+      now: options.now,
+    });
+    const errorReporter = createErrorReporter(logger);
+    const analyticsRepository = new PostgresAnalyticsEventRepository(client);
+    const analyticsTracker = {
+      recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope) {
+        return analyticsRepository.save(event);
+      },
+    };
     const authRepositories = createPostgresAuthRepositories(client, {
       now: options.now,
     });
@@ -96,6 +136,9 @@ function createApiModules(
       now: options.now,
       sessionTtlSeconds: options.sessionTtlSeconds,
       maxAuthAgeSeconds: options.maxAuthAgeSeconds,
+      analytics: analyticsTracker,
+      logger,
+      errorReporter,
     });
     const runRepositories = {
       answerEventRepository: new PostgresAnswerEventRepository(client),
@@ -109,6 +152,9 @@ function createApiModules(
       runResultRepository: runRepositories.runResultRepository,
       contentRepository,
       now: options.now,
+      analytics: analyticsTracker,
+      logger,
+      errorReporter,
     });
     const runModule = createRunModule({
       client,
@@ -116,12 +162,26 @@ function createApiModules(
       now: options.now,
       seedGenerator: options.seedGenerator,
       masteryUpdater: masteryModule.service,
+      analytics: analyticsTracker,
+      logger,
+      errorReporter,
     });
     const contentAdminModule = createContentAdminModule({
       client,
       sessionVerifier: authModule.sessionVerifier,
       env: options.env,
       now: options.now,
+      analytics: analyticsTracker,
+    });
+    const analyticsModule = createAnalyticsModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      env: options.env,
+      now: options.now,
+      repository: analyticsRepository,
+      logger,
+      errorReporter,
+      userMasteryRepository: new PostgresUserMasteryRepository(client),
     });
 
     return {
@@ -129,14 +189,24 @@ function createApiModules(
       runController: runModule.controller,
       masteryController: masteryModule.controller,
       contentAdminController: contentAdminModule.controller,
+      analyticsController: analyticsModule.controller,
+      logger,
+      errorReporter,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'API runtime is unavailable.';
+    const logger = createStructuredLogger({
+      now: options.now,
+    });
+    const errorReporter = createErrorReporter(logger);
     return {
       authController: createUnavailableAuthController(message),
       runController: createUnavailableRunController(message),
       masteryController: createUnavailableMasteryController(message),
       contentAdminController: createUnavailableContentAdminController(message),
+      analyticsController: createUnavailableAnalyticsController(message),
+      logger,
+      errorReporter,
     };
   }
 }
@@ -149,8 +219,10 @@ async function routeRequest(
     runController: RunController;
     masteryController: MasteryController;
     contentAdminController: ContentAdminController;
+    analyticsController: AnalyticsController;
     authConfigured: boolean;
     allowedOrigins: readonly string[];
+    requestId: string;
   },
 ) {
   const method = request.method ?? 'GET';
@@ -189,9 +261,11 @@ async function routeRequest(
         runResult: 'GET /runs/:runId/result',
         reviewQueue: 'GET /review/queue',
         reviewAnswer: 'POST /review/answer',
+        analyticsEvents: 'POST /analytics/events',
         adminVocabItems: 'GET /admin/vocab-items',
         adminImport: 'POST /admin/import/validate',
         adminHistory: 'GET /admin/history',
+        adminAnalyticsOverview: 'GET /admin/analytics/overview',
       },
     });
     return;
@@ -229,6 +303,37 @@ async function routeRequest(
   if (method === 'POST' && url.pathname === '/review/answer') {
     const body = await readJsonBody(request);
     const result = await options.masteryController.handleAnswer(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/analytics/events') {
+    const body = await readJsonBody(request);
+    const result = await options.analyticsController.handleIngest(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/analytics/overview') {
+    const result = await options.analyticsController.handleOverview(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/analytics/funnels') {
+    const result = await options.analyticsController.handleFunnels(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/analytics/content') {
+    const result = await options.analyticsController.handleContent(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/analytics/retention') {
+    const result = await options.analyticsController.handleRetention(authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }

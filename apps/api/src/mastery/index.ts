@@ -13,6 +13,15 @@ type CreateMasteryModuleOptions = {
   runResultRepository: RunResultRepository;
   contentRepository: RunContentRepository;
   now?: () => Date;
+  analytics?: {
+    recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  logger?: {
+    warn(message: string, context: Record<string, unknown>): void;
+  };
+  errorReporter?: {
+    captureError(error: unknown, context: Record<string, unknown>): void;
+  };
 };
 
 export function createMasteryModule(options: CreateMasteryModuleOptions) {
@@ -26,6 +35,9 @@ export function createMasteryModule(options: CreateMasteryModuleOptions) {
     runResultRepository: options.runResultRepository,
     contentRepository: options.contentRepository,
     now: options.now,
+    analytics: options.analytics,
+    logger: options.logger,
+    errorReporter: options.errorReporter,
   });
 
   return {

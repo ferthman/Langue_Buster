@@ -1,7 +1,8 @@
 import type { AppUser, SessionPayload } from '@langue-buster/shared';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { apiClient, ApiClientError } from '../api/client';
+import { createClientErrorReporter, trackAnalyticsEvent } from '../analytics/client';
 import { clearStoredSessionToken, getStoredSessionToken, setStoredSessionToken } from './storage';
 import { useTelegram } from '../telegram/TelegramProvider';
 
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const telegram = useTelegram();
+  const errorReporter = useMemo(() => createClientErrorReporter(), []);
   const bootstrap = useCallback(async () => {
     setState({ status: 'bootstrapping', retry: () => { void bootstrap(); } });
     const storedToken = getStoredSessionToken();
@@ -28,6 +30,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (storedToken) {
       try {
         const response = await apiClient.verifySession(storedToken);
+        await trackAnalyticsEvent(storedToken, {
+          eventName: 'app_bootstrap_succeeded',
+          occurredAt: new Date().toISOString(),
+          userId: response.user.id,
+          sessionId: response.session.id,
+          payload: {
+            method: 'stored_session',
+            route: '/',
+            isTelegram: telegram.isTelegram,
+          },
+        });
         setState({
           status: 'authenticated',
           retry: () => { void bootstrap(); },
@@ -37,6 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         return;
       } catch (error) {
+        errorReporter.captureError(error, {
+          domain: 'auth-bootstrap',
+          method: 'stored_session',
+        });
         if (!(error instanceof ApiClientError) || error.status >= 500) {
           setState({
             status: 'error',
@@ -58,6 +75,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient.authenticateTelegram(telegram.initData);
       setStoredSessionToken(response.session.token);
+      await trackAnalyticsEvent(response.session.token, {
+        eventName: 'app_bootstrap_succeeded',
+        occurredAt: new Date().toISOString(),
+        userId: response.user.id,
+        sessionId: response.session.id,
+        payload: {
+          method: 'telegram_auth',
+          route: '/',
+          isTelegram: telegram.isTelegram,
+        },
+      });
       setState({
         status: 'authenticated',
         retry: () => { void bootstrap(); },
@@ -66,6 +94,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token: response.session.token,
       });
     } catch (error) {
+      errorReporter.captureError(error, {
+        domain: 'auth-bootstrap',
+        method: 'telegram_auth',
+      });
       setState({
         status: 'error',
         retry: () => { void bootstrap(); },
@@ -73,15 +105,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error instanceof Error ? error.message : 'Не удалось авторизоваться через Telegram.',
       });
     }
-  }, [telegram.initData]);
+  }, [errorReporter, telegram.initData, telegram.isTelegram]);
   const [state, setState] = useState<AuthState>({
     status: 'bootstrapping',
     retry: () => { void bootstrap(); },
   });
 
   useEffect(() => {
+    void (async () => {
+      const storedToken = getStoredSessionToken();
+      await trackAnalyticsEvent(storedToken, {
+        eventName: 'app_bootstrap_started',
+        occurredAt: new Date().toISOString(),
+        payload: {
+          method: storedToken ? 'stored_session' : telegram.initData ? 'telegram_auth' : 'none',
+          route: '/',
+          isTelegram: telegram.isTelegram,
+        },
+      });
+    })();
     void bootstrap();
-  }, [bootstrap]);
+  }, [bootstrap, telegram.initData, telegram.isTelegram]);
 
   return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
 }

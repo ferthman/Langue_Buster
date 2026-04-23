@@ -14,6 +14,7 @@ export type UserMasteryRepository = {
   save(record: UserMastery): Promise<UserMastery>;
   findByUserAndItem(userId: string, sourceItemId: string): Promise<UserMastery | null>;
   listByUser(userId: string, levelId?: UserMastery['cefrLevel']): Promise<readonly UserMastery[]>;
+  listAll(): Promise<readonly UserMastery[]>;
 };
 
 export type ReviewAnswerEventRepository = {
@@ -142,6 +143,14 @@ export class PostgresUserMasteryRepository implements UserMasteryRepository {
         [userId],
       );
 
+    return rows.map(mapUserMasteryRow);
+  }
+
+  async listAll(): Promise<readonly UserMastery[]> {
+    const rows = await queryRows<UserMasteryRow>(
+      this.#client,
+      'SELECT * FROM user_mastery ORDER BY updated_at DESC, source_item_id ASC',
+    );
     return rows.map(mapUserMasteryRow);
   }
 }

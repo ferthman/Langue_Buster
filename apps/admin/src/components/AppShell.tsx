@@ -12,6 +12,7 @@ const navigationItems = [
   { href: '/lessons', label: 'Уроки' },
   { href: '/import', label: 'Импорт' },
   { href: '/history', label: 'История' },
+  { href: '/analytics', label: 'Аналитика' },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {

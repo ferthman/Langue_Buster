@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { apiClient, ApiClientError } from '../api/client';
+import { trackAnalyticsEvent } from '../analytics/client';
 import { describeError } from '../api/errors';
 import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
@@ -54,6 +55,21 @@ export function RunScreen() {
       setSelectedTrayIndex(null);
     } catch (loadError) {
       setError(describeError(loadError));
+      if (auth.status === 'authenticated') {
+        void trackAnalyticsEvent(token, {
+          eventName: 'user_visible_failure',
+          occurredAt: new Date().toISOString(),
+          userId: auth.user.id,
+          sessionId: auth.session.id,
+          runId,
+          payload: {
+            route: `/run/${runId}`,
+            screen: 'run',
+            code: loadError instanceof ApiClientError ? loadError.code : 'run_load_failed',
+            message: describeError(loadError),
+          },
+        });
+      }
     } finally {
       setPending(false);
     }
@@ -62,6 +78,25 @@ export function RunScreen() {
   useEffect(() => {
     void loadRun();
   }, [loadRun, runId]);
+
+  useEffect(() => {
+    if (!token || auth.status !== 'authenticated') {
+      return;
+    }
+
+    void trackAnalyticsEvent(token, {
+      eventName: 'run_screen_opened',
+      occurredAt: new Date().toISOString(),
+      userId: auth.user.id,
+      sessionId: auth.session.id,
+      runId,
+      levelId: run?.levelId,
+      payload: {
+        route: `/run/${runId}`,
+        focusLevel: run?.levelId,
+      },
+    });
+  }, [auth, run?.levelId, runId, token]);
 
   if (auth.status !== 'authenticated') {
     return null;
@@ -113,6 +148,20 @@ export function RunScreen() {
     } catch (answerError) {
       setError(describeError(answerError));
       if (answerError instanceof ApiClientError && answerError.code === 'run_invalid_state') {
+        if (auth.status === 'authenticated') {
+          void trackAnalyticsEvent(token, {
+            eventName: 'retry_clicked',
+            occurredAt: new Date().toISOString(),
+            userId: auth.user.id,
+            sessionId: auth.session.id,
+            runId,
+            payload: {
+              route: `/run/${runId}`,
+              screen: 'run',
+              target: 'reload_after_invalid_state',
+            },
+          });
+        }
         void loadRun();
       }
     } finally {
@@ -155,6 +204,20 @@ export function RunScreen() {
       telegram.notify('error');
       setError(describeError(moveError));
       if (moveError instanceof ApiClientError && moveError.code === 'run_invalid_state') {
+        if (auth.status === 'authenticated') {
+          void trackAnalyticsEvent(token, {
+            eventName: 'retry_clicked',
+            occurredAt: new Date().toISOString(),
+            userId: auth.user.id,
+            sessionId: auth.session.id,
+            runId,
+            payload: {
+              route: `/run/${runId}`,
+              screen: 'run',
+              target: 'reload_after_invalid_move_state',
+            },
+          });
+        }
         void loadRun();
       }
     } finally {
@@ -200,7 +263,23 @@ export function RunScreen() {
         title="Ран недоступен"
         description={error}
         actionLabel="Повторить"
-        onAction={() => { void loadRun(); }}
+        onAction={() => {
+          if (auth.status === 'authenticated') {
+            void trackAnalyticsEvent(token, {
+              eventName: 'retry_clicked',
+              occurredAt: new Date().toISOString(),
+              userId: auth.user.id,
+              sessionId: auth.session.id,
+              runId,
+              payload: {
+                route: `/run/${runId}`,
+                screen: 'run',
+                target: 'run_reload',
+              },
+            });
+          }
+          void loadRun();
+        }}
       />
     );
   }

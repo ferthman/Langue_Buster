@@ -20,5 +20,8 @@
     "lint": "eslint src --ext .ts",
     "test": "vitest run --passWithNoTests",
     "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@langue-buster/shared": "workspace:*"
   }
 }

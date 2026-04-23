@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { apiClient } from '../api/client';
+import { trackAnalyticsEvent } from '../analytics/client';
 import { describeError } from '../api/errors';
 import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
@@ -36,6 +37,24 @@ export function ProfileScreen() {
   useEffect(() => {
     void loadQueue();
   }, [focusLevel, loadQueue]);
+
+  useEffect(() => {
+    if (!token || auth.status !== 'authenticated') {
+      return;
+    }
+
+    void trackAnalyticsEvent(token, {
+      eventName: 'profile_opened',
+      occurredAt: new Date().toISOString(),
+      userId: auth.user.id,
+      sessionId: auth.session.id,
+      levelId: focusLevel ?? undefined,
+      payload: {
+        route: '/profile',
+        focusLevel: focusLevel ?? undefined,
+      },
+    });
+  }, [auth, focusLevel, token]);
 
   if (auth.status !== 'authenticated') {
     return null;

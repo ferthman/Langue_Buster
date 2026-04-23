@@ -3,6 +3,7 @@ import { startTransition, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { apiClient } from '../api/client';
+import { trackAnalyticsEvent } from '../analytics/client';
 import { describeError } from '../api/errors';
 import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
@@ -63,6 +64,24 @@ export function HomeScreen() {
     void loadSummary();
   }, [activeRunId, focusLevel, loadSummary]);
 
+  useEffect(() => {
+    if (!token || auth.status !== 'authenticated') {
+      return;
+    }
+
+    void trackAnalyticsEvent(token, {
+      eventName: 'home_opened',
+      occurredAt: new Date().toISOString(),
+      userId: auth.user.id,
+      sessionId: auth.session.id,
+      levelId: focusLevel ?? undefined,
+      payload: {
+        route: '/home',
+        focusLevel: focusLevel ?? undefined,
+      },
+    });
+  }, [auth, focusLevel, token]);
+
   if (auth.status !== 'authenticated') {
     return null;
   }
@@ -86,6 +105,21 @@ export function HomeScreen() {
       });
     } catch (startError) {
       setError(describeError(startError));
+      if (auth.status === 'authenticated') {
+        void trackAnalyticsEvent(token, {
+          eventName: 'user_visible_failure',
+          occurredAt: new Date().toISOString(),
+          userId: auth.user.id,
+          sessionId: auth.session.id,
+          levelId: focusLevel ?? undefined,
+          payload: {
+            route: '/home',
+            screen: 'home',
+            code: 'run_start_failed',
+            message: describeError(startError),
+          },
+        });
+      }
     } finally {
       setStarting(false);
     }

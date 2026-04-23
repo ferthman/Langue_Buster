@@ -64,9 +64,11 @@ describe('mounted auth and run routes', () => {
         runResult: 'GET /runs/:runId/result',
         reviewQueue: 'GET /review/queue',
         reviewAnswer: 'POST /review/answer',
+        analyticsEvents: 'POST /analytics/events',
         adminVocabItems: 'GET /admin/vocab-items',
         adminImport: 'POST /admin/import/validate',
         adminHistory: 'GET /admin/history',
+        adminAnalyticsOverview: 'GET /admin/analytics/overview',
       },
     });
   });
@@ -127,6 +129,47 @@ describe('mounted auth and run routes', () => {
 
     expect(sessionResponse.status).toBe(200);
     expect((sessionResponse.body as { user: { telegramUserId: string } }).user.telegramUserId).toBe('123456');
+  });
+
+  it('accepts validated frontend analytics ingestion and persists the event', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const authResponse = await authenticate(handler, '123456');
+    const token = getToken(authResponse.body);
+
+    const response = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/analytics/events',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        events: [
+          {
+            eventName: 'home_opened',
+            source: 'frontend',
+            occurredAt: fixedNow.toISOString(),
+            payload: {
+              route: '/home',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(202);
+    expect((response.body as { acceptedCount: number }).acceptedCount).toBe(1);
+
+    const persisted = await poolContext.pool.query<{
+      event_name: string;
+      user_id: string | null;
+    }>('SELECT event_name, user_id FROM analytics_events ORDER BY occurred_at ASC, id ASC');
+
+    expect(persisted.rows).toHaveLength(2);
+    expect(persisted.rows[persisted.rows.length - 1]).toMatchObject({
+      event_name: 'home_opened',
+    });
   });
 
   it('starts a run, persists it, and returns deterministic initial state for the same seed', async () => {
@@ -238,6 +281,96 @@ describe('mounted auth and run routes', () => {
 
     expect(duplicate.status).toBe(409);
     expect((duplicate.body as { code: string }).code).toBe('run_invalid_state');
+  });
+
+  it('emits backend analytics for runs and review, then serves admin analytics aggregations', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const adminAuth = await authenticate(handler, '999999');
+    const token = getToken(adminAuth.body);
+    const run = await startRun(handler, token);
+    const wrongOption = run.currentQuestionState.question.options.find(
+      (option) => option.id !== run.currentQuestionState.question.correctOptionId,
+    );
+
+    expect(wrongOption).toBeTruthy();
+
+    const answerResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: wrongOption?.id,
+        answeredAt: '2026-04-22T00:00:01.000Z',
+      },
+    });
+    expect(answerResponse.status).toBe(200);
+
+    const finishResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/finish`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(finishResponse.status).toBe(200);
+
+    const reviewQueue = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/review/queue?limit=20&direction=ru_to_fr',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(reviewQueue.status).toBe(200);
+
+    const overviewResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/analytics/overview',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(overviewResponse.status).toBe(200);
+    expect((overviewResponse.body as { overview: { firstRunStartCount: number; runAbandonCount: number; reviewAdoptionCount: number } }).overview).toMatchObject({
+      firstRunStartCount: 1,
+      runAbandonCount: 1,
+      reviewAdoptionCount: 1,
+    });
+
+    const contentResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/analytics/content',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(contentResponse.status).toBe(200);
+    expect(
+      (contentResponse.body as { frequentlyFailedItems: Array<{ wrongAnswerCount: number }> }).frequentlyFailedItems[0]
+        ?.wrongAnswerCount,
+    ).toBeGreaterThanOrEqual(1);
+
+    const retentionResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/analytics/retention',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    expect(retentionResponse.status).toBe(200);
+    expect((retentionResponse.body as { totalUsers: number }).totalUsers).toBe(1);
+
+    const analyticsRows = await poolContext.pool.query<{ event_name: string }>(
+      'SELECT event_name FROM analytics_events ORDER BY occurred_at ASC, id ASC',
+    );
+    expect(analyticsRows.rows.filter((row) => row.event_name === 'run_started')).toHaveLength(1);
+    expect(analyticsRows.rows.filter((row) => row.event_name === 'answer_wrong')).toHaveLength(1);
+    expect(analyticsRows.rows.filter((row) => row.event_name === 'run_abandoned')).toHaveLength(1);
+    expect(analyticsRows.rows.filter((row) => row.event_name === 'review_queue_opened')).toHaveLength(1);
   });
 
   it('rejects move submission before the move is unlocked', async () => {

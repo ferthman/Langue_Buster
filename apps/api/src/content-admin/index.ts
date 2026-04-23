@@ -10,6 +10,9 @@ type CreateContentAdminModuleOptions = {
   sessionVerifier: SessionVerifier;
   env: Record<string, string | undefined>;
   now?: () => Date;
+  analytics?: {
+    recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
+  };
 };
 
 export function createContentAdminModule(options: CreateContentAdminModuleOptions) {
@@ -17,6 +20,7 @@ export function createContentAdminModule(options: CreateContentAdminModuleOption
   const service = createContentAdminService({
     repository,
     now: options.now,
+    analytics: options.analytics,
   });
   const verifier = createAdminSessionGuard(options.sessionVerifier, {
     allowedUserIds: parseCommaSeparatedEnv(options.env.ADMIN_ALLOWED_USER_IDS),

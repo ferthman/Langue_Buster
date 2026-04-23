@@ -12,6 +12,7 @@ import {
   type EngineState as GameEngineState,
 } from '@langue-buster/game-engine';
 import type {
+  AnalyticsEventEnvelope,
   AnswerDirection,
   AnswerEvent,
   AnswerEvaluation,
@@ -44,6 +45,15 @@ type RunServiceDependencies = {
   seedGenerator?: () => number;
   masteryUpdater?: {
     applyRunMastery(runId: string): Promise<unknown>;
+  };
+  analytics?: {
+    recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  logger?: {
+    warn(message: string, context: Record<string, unknown>): void;
+  };
+  errorReporter?: {
+    captureError(error: unknown, context: Record<string, unknown>): void;
   };
 };
 
@@ -96,7 +106,22 @@ export function createRunService(dependencies: RunServiceDependencies) {
         startedAt,
       });
 
-      return dependencies.runSessionRepository.save(run);
+      const saved = await dependencies.runSessionRepository.save(run);
+      await dependencies.analytics?.recordEvent({
+        eventName: 'run_started',
+        source: 'backend',
+        occurredAt: startedAt,
+        userId: saved.userId,
+        runId: saved.id,
+        levelId: saved.levelId,
+        payload: {
+          status: saved.status,
+          score: saved.score,
+          moveCount: saved.moveCount,
+        },
+      });
+      await recordQuestionShown(dependencies, saved);
+      return saved;
     },
 
     async getRunForUser(runId: string, userId: string): Promise<RunSession> {
@@ -158,6 +183,44 @@ export function createRunService(dependencies: RunServiceDependencies) {
         occurredAt,
       };
       await dependencies.answerEventRepository.save(answerEvent);
+      await dependencies.analytics?.recordEvent({
+        eventName: 'answer_submitted',
+        source: 'backend',
+        occurredAt,
+        userId: run.userId,
+        runId: run.id,
+        levelId: run.levelId,
+        sourceItemId: answerEvent.sourceItemId,
+        topicId: questionState.question.meta.topicId,
+        payload: {
+          questionId: answerEvent.questionId,
+          selectedOptionId: answerEvent.selectedOptionId,
+          correctOptionId: answerEvent.correctOptionId,
+          cardType: evaluation.cardType,
+          timingMs: evaluation.timingMs,
+          moveUnlocked: evaluation.moveUnlocked,
+          correctness: evaluation.isCorrect,
+        },
+      });
+      await dependencies.analytics?.recordEvent({
+        eventName: evaluation.isCorrect ? 'answer_correct' : 'answer_wrong',
+        source: 'backend',
+        occurredAt,
+        userId: run.userId,
+        runId: run.id,
+        levelId: run.levelId,
+        sourceItemId: answerEvent.sourceItemId,
+        topicId: questionState.question.meta.topicId,
+        payload: {
+          questionId: answerEvent.questionId,
+          selectedOptionId: answerEvent.selectedOptionId,
+          correctOptionId: answerEvent.correctOptionId,
+          cardType: evaluation.cardType,
+          timingMs: evaluation.timingMs,
+          moveUnlocked: evaluation.moveUnlocked,
+          correctness: evaluation.isCorrect,
+        },
+      });
 
       if (evaluation.isCorrect) {
         const nextRun = await dependencies.runSessionRepository.save({
@@ -221,6 +284,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         status: 'active',
         currentQuestionState: nextQuestion,
       });
+      await recordQuestionShown(dependencies, nextRun);
 
       return {
         run: nextRun,
@@ -249,10 +313,58 @@ export function createRunService(dependencies: RunServiceDependencies) {
         throw new RunDomainError('run_invalid_move', `Tray slot ${input.trayIndex} does not contain an active piece.`);
       }
 
+      await dependencies.analytics?.recordEvent({
+        eventName: 'move_submitted',
+        source: 'backend',
+        occurredAt: now().toISOString(),
+        userId: run.userId,
+        runId: run.id,
+        levelId: run.levelId,
+        sourceItemId: questionState.question.meta.sourceItemId,
+        topicId: questionState.question.meta.topicId,
+        payload: {
+          trayIndex: input.trayIndex,
+          originX: input.origin.x,
+          originY: input.origin.y,
+          pieceId: activePiece.pieceId,
+          pieceInstanceId: activePiece.instanceId,
+          engineTurn: run.engineState.turn,
+        },
+      });
+
       let applied;
       try {
         applied = applyPlacement(run.engineState as GameEngineState, input.trayIndex, input.origin);
       } catch (error) {
+        await dependencies.analytics?.recordEvent({
+          eventName: 'move_rejected',
+          source: 'backend',
+          occurredAt: now().toISOString(),
+          userId: run.userId,
+          runId: run.id,
+          levelId: run.levelId,
+          sourceItemId: questionState.question.meta.sourceItemId,
+          topicId: questionState.question.meta.topicId,
+          payload: {
+            trayIndex: input.trayIndex,
+            originX: input.origin.x,
+            originY: input.origin.y,
+            pieceId: activePiece.pieceId,
+            pieceInstanceId: activePiece.instanceId,
+            engineTurn: run.engineState.turn,
+            reasonCode: error instanceof Error ? error.message : 'invalid_move',
+          },
+        });
+        dependencies.logger?.warn('Run move rejected by engine.', {
+          domain: 'run',
+          runId: run.id,
+          userId: run.userId,
+          code: 'run_invalid_move',
+          extra: {
+            trayIndex: input.trayIndex,
+            origin: input.origin,
+          },
+        });
         throw new RunDomainError(
           'run_invalid_move',
           error instanceof Error ? error.message : 'Move could not be applied by the game engine.',
@@ -276,6 +388,26 @@ export function createRunService(dependencies: RunServiceDependencies) {
         occurredAt,
       };
       await dependencies.moveEventRepository.save(moveEvent);
+      await dependencies.analytics?.recordEvent({
+        eventName: 'move_accepted',
+        source: 'backend',
+        occurredAt,
+        userId: run.userId,
+        runId: run.id,
+        levelId: run.levelId,
+        sourceItemId: questionState.question.meta.sourceItemId,
+        topicId: questionState.question.meta.topicId,
+        payload: {
+          trayIndex: input.trayIndex,
+          originX: input.origin.x,
+          originY: input.origin.y,
+          pieceId: moveEvent.pieceId,
+          pieceInstanceId: moveEvent.pieceInstanceId,
+          engineTurn: moveEvent.engineTurn,
+          clearedLineCount: moveEvent.clearedLineCount,
+          scoreDelta: moveEvent.scoreBreakdown.totalPoints,
+        },
+      });
 
       const baseRun: RunSession = {
         ...run,
@@ -317,6 +449,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         status: 'active',
         currentQuestionState: nextQuestion,
       });
+      await recordQuestionShown(dependencies, nextRun);
 
       return {
         run: nextRun,
@@ -422,11 +555,15 @@ async function finalizeRunWithMastery(
   run: RunSession,
   dependencies: Pick<
     RunServiceDependencies,
-    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'masteryUpdater'
+    'moveEventRepository' | 'answerEventRepository' | 'runResultRepository' | 'masteryUpdater' | 'analytics'
   >,
   now: () => Date,
 ): Promise<RunResult> {
+  const existing = await dependencies.runResultRepository.findByRunId(run.id);
   const result = await finalizeRunInternal(run, dependencies, now);
+  if (!existing) {
+    await recordRunFinished(dependencies, run, result);
+  }
   return ensureMasteryApplied(run.id, result, dependencies);
 }
 
@@ -515,4 +652,54 @@ function normalizeSeed(seed: number): number {
 
 function cloneEngineState(state: GameEngineState): RunSession['engineState'] {
   return JSON.parse(JSON.stringify(state)) as RunSession['engineState'];
+}
+
+async function recordQuestionShown(
+  dependencies: Pick<RunServiceDependencies, 'analytics'>,
+  run: RunSession,
+) {
+  const questionState = run.currentQuestionState;
+  if (!questionState) {
+    return;
+  }
+
+  await dependencies.analytics?.recordEvent({
+    eventName: 'question_shown',
+    source: 'backend',
+    occurredAt: questionState.shownAt,
+    userId: run.userId,
+    runId: run.id,
+    levelId: run.levelId,
+    sourceItemId: questionState.question.meta.sourceItemId,
+    topicId: questionState.question.meta.topicId,
+    payload: {
+      questionId: questionState.question.id,
+      sequence: questionState.sequence,
+      cardType: questionState.question.cardType,
+      answerState: questionState.answerState,
+    },
+  });
+}
+
+async function recordRunFinished(
+  dependencies: Pick<RunServiceDependencies, 'analytics'>,
+  run: RunSession,
+  result: RunResult,
+) {
+  await dependencies.analytics?.recordEvent({
+    eventName: result.status === 'abandoned' ? 'run_abandoned' : 'run_completed',
+    source: 'backend',
+    occurredAt: result.finishedAt,
+    userId: result.userId,
+    runId: result.runId,
+    levelId: result.levelId,
+    payload: {
+      status: result.status,
+      score: result.finalScore,
+      durationMs: result.durationMs,
+      correctCount: result.correctCount,
+      wrongCount: result.wrongCount,
+      moveCount: run.moveCount,
+    },
+  });
 }

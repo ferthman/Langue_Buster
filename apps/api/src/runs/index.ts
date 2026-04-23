@@ -13,6 +13,15 @@ type CreateRunModuleOptions = {
   masteryUpdater?: {
     applyRunMastery(runId: string): Promise<unknown>;
   };
+  analytics?: {
+    recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  logger?: {
+    warn(message: string, context: Record<string, unknown>): void;
+  };
+  errorReporter?: {
+    captureError(error: unknown, context: Record<string, unknown>): void;
+  };
 };
 
 export function createRunModule(options: CreateRunModuleOptions) {
@@ -29,6 +38,9 @@ export function createRunModule(options: CreateRunModuleOptions) {
     now: options.now,
     seedGenerator: options.seedGenerator,
     masteryUpdater: options.masteryUpdater,
+    analytics: options.analytics,
+    logger: options.logger,
+    errorReporter: options.errorReporter,
   });
 
   return {

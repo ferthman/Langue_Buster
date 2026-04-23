@@ -1,4 +1,8 @@
 import type {
+  AnalyticsContentResponse,
+  AnalyticsFunnelsResponse,
+  AnalyticsOverviewResponse,
+  AnalyticsRetentionResponse,
   AdminBulkUpdateVocabItemsRequest,
   AdminBulkUpdateVocabItemsResponse,
   AdminHistoryQuery,
@@ -26,6 +30,10 @@ import {
   adminBulkUpdateVocabItemsRequestSchema,
   adminBulkUpdateVocabItemsResponseSchema,
   adminErrorSchema,
+  analyticsContentResponseSchema,
+  analyticsFunnelsResponseSchema,
+  analyticsOverviewResponseSchema,
+  analyticsRetentionResponseSchema,
   adminHistoryQuerySchema,
   adminHistoryResponseSchema,
   adminImportApplyResponseSchema,
@@ -319,6 +327,50 @@ export const adminApi = {
       responseSchema: adminHistoryResponseSchema,
       errorSchemas: [adminErrorSchema, authErrorSchema],
       fallbackErrorMessage: 'Не удалось загрузить историю изменений.',
+    });
+  },
+
+  getAnalyticsOverview(token: string) {
+    return request<AnalyticsOverviewResponse>({
+      path: '/admin/analytics/overview',
+      method: 'GET',
+      token,
+      responseSchema: analyticsOverviewResponseSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить обзор аналитики.',
+    });
+  },
+
+  getAnalyticsFunnels(token: string) {
+    return request<AnalyticsFunnelsResponse>({
+      path: '/admin/analytics/funnels',
+      method: 'GET',
+      token,
+      responseSchema: analyticsFunnelsResponseSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить воронку аналитики.',
+    });
+  },
+
+  getAnalyticsContent(token: string) {
+    return request<AnalyticsContentResponse>({
+      path: '/admin/analytics/content',
+      method: 'GET',
+      token,
+      responseSchema: analyticsContentResponseSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить контентную аналитику.',
+    });
+  },
+
+  getAnalyticsRetention(token: string) {
+    return request<AnalyticsRetentionResponse>({
+      path: '/admin/analytics/retention',
+      method: 'GET',
+      token,
+      responseSchema: analyticsRetentionResponseSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить retention.',
     });
   },
 };

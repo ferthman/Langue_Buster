@@ -5,6 +5,7 @@ import {
   type VocabItem,
 } from '@langue-buster/content-core';
 import type {
+  AnalyticsEventEnvelope,
   AnswerDirection,
   AnswerEvaluation,
   AnswerEvent,
@@ -38,6 +39,15 @@ type MasteryServiceDependencies = {
   runResultRepository: RunResultRepository;
   contentRepository: RunContentRepository;
   now?: () => Date;
+  analytics?: {
+    recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  logger?: {
+    warn(message: string, context: Record<string, unknown>): void;
+  };
+  errorReporter?: {
+    captureError(error: unknown, context: Record<string, unknown>): void;
+  };
 };
 
 export type MasteryService = ReturnType<typeof createMasteryService>;
@@ -82,6 +92,16 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
       const scheduled = scheduleReviewQueue(masteries, {
         now: nowIso,
         limit: input.limit,
+      });
+      await dependencies.analytics?.recordEvent({
+        eventName: 'review_queue_opened',
+        source: 'backend',
+        occurredAt: nowIso,
+        userId: input.userId,
+        levelId: input.levelId,
+        payload: {
+          queueLength: scheduled.length,
+        },
       });
 
       return scheduled.map(({ mastery, priority }) =>
@@ -129,6 +149,23 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
 
       const occurredAt = input.answeredAt ?? now().toISOString();
       const evaluation = evaluateAnswer(question, input.selectedOptionId);
+      await dependencies.analytics?.recordEvent({
+        eventName: 'review_answer_submitted',
+        source: 'backend',
+        occurredAt,
+        userId: input.userId,
+        levelId: existing.cefrLevel,
+        sourceItemId: input.sourceItemId,
+        topicId: requireSourceItem(dependencies.contentRepository, input.sourceItemId).topicId,
+        payload: {
+          questionId: question.id,
+          selectedOptionId: input.selectedOptionId,
+          correctOptionId: question.correctOptionId,
+          timingMs: evaluation.timingMs,
+          correctness: evaluation.isCorrect,
+          masteryStateBefore: existing.masteryState,
+        },
+      });
       const applied = await applySignal(dependencies, {
         userId: input.userId,
         sourceItemId: input.sourceItemId,
@@ -151,6 +188,24 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
         occurredAt,
       });
       await dependencies.reviewAnswerEventRepository.save(event);
+      await dependencies.analytics?.recordEvent({
+        eventName: evaluation.isCorrect ? 'review_answer_correct' : 'review_answer_wrong',
+        source: 'backend',
+        occurredAt,
+        userId: input.userId,
+        levelId: existing.cefrLevel,
+        sourceItemId: input.sourceItemId,
+        topicId: requireSourceItem(dependencies.contentRepository, input.sourceItemId).topicId,
+        payload: {
+          questionId: question.id,
+          selectedOptionId: input.selectedOptionId,
+          correctOptionId: question.correctOptionId,
+          timingMs: evaluation.timingMs,
+          correctness: evaluation.isCorrect,
+          masteryStateBefore: applied.previousState,
+          masteryStateAfter: applied.mastery.masteryState,
+        },
+      });
 
       return {
         evaluation,

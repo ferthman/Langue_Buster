@@ -1,4 +1,6 @@
 import type {
+  AnalyticsEventEnvelope,
+  AnalyticsIngestResponse,
   AuthResponse,
   ReviewAnswerRequest,
   ReviewAnswerResponse,
@@ -35,6 +37,9 @@ import {
   runStateResponseSchema,
   sessionVerificationResponseSchema,
   telegramAuthRequestSchema,
+  analyticsErrorSchema,
+  analyticsIngestRequestSchema,
+  analyticsIngestResponseSchema,
 } from '@langue-buster/shared';
 
 type ApiErrorPayload = {
@@ -190,6 +195,18 @@ export const apiClient = {
       responseSchema: reviewAnswerResponseSchema,
       errorSchemas: [reviewErrorSchema],
       fallbackErrorMessage: 'Не удалось отправить ответ на повторение.',
+    });
+  },
+
+  ingestAnalyticsEvents(token: string, events: readonly AnalyticsEventEnvelope[]) {
+    return request<AnalyticsIngestResponse>({
+      path: '/analytics/events',
+      method: 'POST',
+      token,
+      body: analyticsIngestRequestSchema.parse({ events }),
+      responseSchema: analyticsIngestResponseSchema,
+      errorSchemas: [analyticsErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось отправить аналитические события.',
     });
   },
 };
