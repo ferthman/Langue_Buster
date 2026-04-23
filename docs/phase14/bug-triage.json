@@ -1,0 +1,83 @@
+{
+  "phase": "14",
+  "generatedAt": "2026-04-23T00:00:00.000Z",
+  "issues": [
+    {
+      "id": "QA-001",
+      "title": "API lint blocked expected validation path",
+      "severity": "P1",
+      "area": "verification",
+      "reproducibility": "always",
+      "launchBlocking": true,
+      "status": "fixed",
+      "resolution": "Removed stale unused imports, fixed require-await on unavailable controllers, typed auth zod issue handling, and made JSON parsing explicit in run repositories.",
+      "evidence": "corepack pnpm --filter @langue-buster/api lint passes"
+    },
+    {
+      "id": "QA-002",
+      "title": "Active run restore/reopen path lacked regression coverage",
+      "severity": "P1",
+      "area": "miniapp",
+      "reproducibility": "always",
+      "launchBlocking": true,
+      "status": "fixed",
+      "resolution": "Added Mini App test proving local activeRunId renders a resume CTA only after backend confirms an active or awaiting-move run.",
+      "evidence": "corepack pnpm --filter @langue-buster/miniapp test passes"
+    },
+    {
+      "id": "QA-003",
+      "title": "Review stale question mismatch recovery lacked regression coverage",
+      "severity": "P1",
+      "area": "miniapp-review",
+      "reproducibility": "always",
+      "launchBlocking": true,
+      "status": "fixed",
+      "resolution": "Added Mini App test for review_question_mismatch refetch recovery.",
+      "evidence": "corepack pnpm --filter @langue-buster/miniapp test passes"
+    },
+    {
+      "id": "QA-004",
+      "title": "Launch bundle QA missed example completeness and stricter reference checks",
+      "severity": "P1",
+      "area": "content",
+      "reproducibility": "always",
+      "launchBlocking": true,
+      "status": "fixed",
+      "resolution": "Extended Phase 11 launch QA with example completeness, approved reference coherence, linked option label matching, and high-risk duplicate Russian translation detection.",
+      "evidence": "corepack pnpm --filter @langue-buster/content-core test passes"
+    },
+    {
+      "id": "QA-005",
+      "title": "Game balance lacked deterministic smoke coverage",
+      "severity": "P2",
+      "area": "game-engine",
+      "reproducibility": "always",
+      "launchBlocking": false,
+      "status": "fixed",
+      "resolution": "Added deterministic fixed-seed balance simulation covering move count, score, line clears, combos, and run-over distribution.",
+      "evidence": "corepack pnpm --filter @langue-buster/game-engine test passes"
+    },
+    {
+      "id": "QA-006",
+      "title": "Telegram dark theme variable application lacked regression coverage",
+      "severity": "P2",
+      "area": "miniapp-ux",
+      "reproducibility": "always",
+      "launchBlocking": false,
+      "status": "fixed",
+      "resolution": "Added Mini App test for dark theme dataset and Telegram CSS custom properties.",
+      "evidence": "corepack pnpm --filter @langue-buster/miniapp test passes"
+    },
+    {
+      "id": "QA-007",
+      "title": "Soft-launch balance should be tuned with real user data",
+      "severity": "P3",
+      "area": "balance",
+      "reproducibility": "variable",
+      "launchBlocking": false,
+      "status": "deferred",
+      "resolution": "No code change; deterministic simulation is launchable, but real first-session run length and answer cadence should be reviewed during Phase 15.",
+      "evidence": "docs/phase14/balance-notes.md"
+    }
+  ]
+}

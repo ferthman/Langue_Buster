@@ -140,8 +140,14 @@ describe('mastery scheduler and state machine', () => {
       'vocab.a1.learning',
       'vocab.a1.stable',
     ]);
-    expect(calculateReviewPriority(queue[0]!.mastery, baseTime)).toBeGreaterThan(
-      calculateReviewPriority(queue[1]!.mastery, baseTime),
+    const firstQueueEntry = queue[0];
+    const secondQueueEntry = queue[1];
+    if (!firstQueueEntry || !secondQueueEntry) {
+      throw new Error('Expected at least two queue entries.');
+    }
+
+    expect(calculateReviewPriority(firstQueueEntry.mastery, baseTime)).toBeGreaterThan(
+      calculateReviewPriority(secondQueueEntry.mastery, baseTime),
     );
   });
 

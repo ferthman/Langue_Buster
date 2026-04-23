@@ -1,6 +1,5 @@
 import type {
   MasteryState,
-  ReviewQueueItem,
   ReviewResurfacingReason,
   UserMastery,
 } from '@langue-buster/shared';

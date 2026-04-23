@@ -40,6 +40,38 @@ describe('phase 11 launch content pack', () => {
 
     expect(nounLikeItems.length).toBeGreaterThan(200);
     expect(nounLikeItems.every((item) => typeof item.article === 'string' && typeof item.gender === 'string')).toBe(true);
+    expect(phase11LaunchQaSnapshot.nounLikeCount).toBe(nounLikeItems.length);
+  });
+
+  it('has complete examples and no high-risk duplicate Russian translations', () => {
+    expect(phase11LaunchQaSnapshot.exampleCoverage).toBe(phase11LaunchBundle.vocabItems.length);
+    expect(phase11LaunchQaSnapshot.highRiskDuplicateTranslationCount).toBe(0);
+    expect(
+      phase11LaunchBundle.vocabItems.every((item) =>
+        item.exampleSentence.fr.trim().length > 0 && item.exampleSentence.ru.trim().length > 0),
+    ).toBe(true);
+  });
+
+  it('keeps lesson, level, topic, and distractor references approved and coherent', () => {
+    const items = new Map(phase11LaunchBundle.vocabItems.map((item) => [item.id, item]));
+    const topics = new Map(phase11LaunchBundle.topics.map((topic) => [topic.id, topic]));
+    const lessons = new Map(phase11LaunchBundle.lessons.map((lesson) => [lesson.id, lesson]));
+    const distractorSets = new Map(phase11LaunchBundle.distractorSets.map((set) => [set.id, set]));
+
+    for (const item of phase11LaunchBundle.vocabItems) {
+      expect(topics.get(item.topicId)?.status).toBe('approved');
+      expect(distractorSets.get(item.distractorSetId ?? '')?.status).toBe('approved');
+    }
+
+    for (const lesson of phase11LaunchBundle.lessons) {
+      expect(lesson.topicIds.every((topicId) => topics.get(topicId)?.status === 'approved')).toBe(true);
+      expect(lesson.contentRefs.every((contentRef) => items.get(contentRef.itemId)?.status === 'approved')).toBe(true);
+    }
+
+    for (const level of phase11LaunchBundle.levels) {
+      expect(level.topicIds.every((topicId) => topics.get(topicId)?.status === 'approved')).toBe(true);
+      expect(level.lessonIds.every((lessonId) => lessons.get(lessonId)?.status === 'approved')).toBe(true);
+    }
   });
 
   it('passes ambiguity and question-generation QA with zero blocking issues', () => {

@@ -26,6 +26,11 @@ type AuthServiceDependencies = {
   };
 };
 
+type ZodLikeIssue = Readonly<{
+  path?: readonly unknown[];
+  message?: unknown;
+}>;
+
 export type AuthService = ReturnType<typeof createAuthService>;
 
 export function createAuthService(dependencies: AuthServiceDependencies) {
@@ -93,7 +98,7 @@ export function normalizeAuthError(error: unknown): AuthError {
   };
 }
 
-function isZodLikeError(error: unknown): error is { name: string } {
+function isZodLikeError(error: unknown): error is { name: string; issues?: unknown } {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'ZodError';
 }
 
@@ -107,18 +112,19 @@ function buildZodIssueMessage(error: unknown) {
     return 'Authentication payload did not match the expected schema.';
   }
 
-  const issues = error.issues
+  const issues = (error.issues as readonly unknown[])
     .map((issue) => {
       if (typeof issue !== 'object' || issue === null) {
         return null;
       }
 
+      const zodIssue = issue as ZodLikeIssue;
       const path =
-        'path' in issue && Array.isArray(issue.path) && issue.path.length > 0
-          ? issue.path.join('.')
+        Array.isArray(zodIssue.path) && zodIssue.path.length > 0
+          ? zodIssue.path.join('.')
           : 'root';
-      const message = 'message' in issue && typeof issue.message === 'string'
-        ? issue.message
+      const message = typeof zodIssue.message === 'string'
+        ? zodIssue.message
         : 'Invalid value.';
 
       return `${path}: ${message}`;

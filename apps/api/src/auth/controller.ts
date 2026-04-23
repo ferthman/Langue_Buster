@@ -124,18 +124,18 @@ export function createUnavailableAuthController(message: string) {
   };
 
   return {
-    async handleTelegramAuth(): Promise<AuthHttpResult> {
-      return {
+    handleTelegramAuth(): Promise<AuthHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
 
-    async handleSessionLookup(): Promise<AuthHttpResult> {
-      return {
+    handleSessionLookup(): Promise<AuthHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
   };
 }

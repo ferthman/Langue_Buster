@@ -1,14 +1,12 @@
 import {
   evaluateAnswer,
   generateQuestion,
-  type DistractorSet,
   type VocabItem,
 } from '@langue-buster/content-core';
 import type {
   AnalyticsEventEnvelope,
   AnswerDirection,
   AnswerEvaluation,
-  AnswerEvent,
   ReviewAnswerEvent,
   ReviewQueueItem,
   RunResult,
@@ -17,7 +15,6 @@ import type {
 import {
   reviewAnswerEventSchema,
   reviewQueueItemSchema,
-  reviewQueueResponseSchema,
 } from '@langue-buster/shared';
 import { randomUUID } from 'node:crypto';
 

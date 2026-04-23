@@ -1,7 +1,6 @@
 import type {
   AnswerEvent,
   MoveEvent,
-  RunQuestionState,
   RunResult,
   RunSession,
 } from '@langue-buster/shared';
@@ -377,9 +376,9 @@ function mapRunSessionRow(row: RunSessionRow): RunSession {
     score: row.score,
     combo: row.combo,
     seed: row.seed,
-    engineState: JSON.parse(row.engine_state),
+    engineState: parseJson(row.engine_state),
     currentQuestionState: row.current_question_state
-      ? runQuestionStateSchema.parse(JSON.parse(row.current_question_state))
+      ? runQuestionStateSchema.parse(parseJson(row.current_question_state))
       : null,
     answerCount: row.answer_count,
     correctCount: row.correct_count,
@@ -400,7 +399,7 @@ function mapAnswerEventRow(row: AnswerEventRow): AnswerEvent {
     correctOptionId: row.correct_option_id,
     correctness: row.correctness,
     timingMs: row.timing_ms ?? undefined,
-    penalty: row.penalty_json ? JSON.parse(row.penalty_json) : null,
+    penalty: row.penalty_json ? parseJson(row.penalty_json) : null,
     occurredAt: row.occurred_at,
   });
 }
@@ -419,11 +418,15 @@ function mapMoveEventRow(row: MoveEventRow): MoveEvent {
     },
     validationResult: row.validation_result,
     clearedLineCount: row.cleared_line_count,
-    scoreBreakdown: JSON.parse(row.score_breakdown_json),
+    scoreBreakdown: parseJson(row.score_breakdown_json),
     resultingScore: row.resulting_score,
     resultingCombo: row.resulting_combo,
     occurredAt: row.occurred_at,
   });
+}
+
+function parseJson(input: string): unknown {
+  return JSON.parse(input) as unknown;
 }
 
 function mapRunResultRow(row: RunResultRow): RunResult {

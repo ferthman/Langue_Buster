@@ -205,22 +205,6 @@ function getWrongOptionId(run: RunSession): string {
   return wrong.id;
 }
 
-function allCellsExcept(excluded: readonly Coordinate[]): readonly Coordinate[] {
-  const excludedKeys = new Set(excluded.map((coordinate) => `${coordinate.x},${coordinate.y}`));
-  const coordinates: Coordinate[] = [];
-
-  for (let y = 0; y < 8; y += 1) {
-    for (let x = 0; x < 8; x += 1) {
-      const key = `${x},${y}`;
-      if (!excludedKeys.has(key)) {
-        coordinates.push({ x, y });
-      }
-    }
-  }
-
-  return coordinates;
-}
-
 function checkerboardFilledCoordinates(): readonly Coordinate[] {
   const coordinates: Coordinate[] = [];
 

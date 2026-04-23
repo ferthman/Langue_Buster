@@ -25,10 +25,14 @@ export type Phase11LaunchIssue = Readonly<{
   code:
     | 'schema_invalid'
     | 'translation_incomplete'
+    | 'example_incomplete'
+    | 'reference_invalid'
+    | 'duplicate_translation_review'
     | 'article_gender_inconsistent'
     | 'status_not_approved'
     | 'distractor_invalid'
     | 'card_type_incompatible'
+    | 'linked_option_mismatch'
     | 'question_generation_failed';
   path: string;
   message: string;
@@ -39,6 +43,9 @@ export type Phase11LaunchQaSnapshot = Readonly<{
   totalDistractorSets: number;
   totalLessons: number;
   totalTopics: number;
+  exampleCoverage: number;
+  nounLikeCount: number;
+  highRiskDuplicateTranslationCount: number;
   levelCounts: Record<'A1' | 'A2', number>;
   topicCounts: Record<string, number>;
   issueCount: number;
@@ -83,6 +90,9 @@ export const phase11LaunchQaSnapshot: Phase11LaunchQaSnapshot = {
   totalDistractorSets: phase11LaunchBundle.distractorSets.length,
   totalLessons: phase11LaunchBundle.lessons.length,
   totalTopics: phase11LaunchBundle.topics.length,
+  exampleCoverage: phase11LaunchBundle.vocabItems.filter(hasCompleteExample).length,
+  nounLikeCount: phase11LaunchBundle.vocabItems.filter(isNounLike).length,
+  highRiskDuplicateTranslationCount: findHighRiskDuplicateTranslations(phase11LaunchBundle.vocabItems).length,
   levelCounts: {
     A1: phase11SourceLists.A1.length,
     A2: phase11SourceLists.A2.length,
@@ -108,6 +118,9 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
 
   const issues: Phase11LaunchIssue[] = [];
   const itemById = new Map(bundle.vocabItems.map((item) => [item.id, item]));
+  const topicById = new Map(bundle.topics.map((topic) => [topic.id, topic]));
+  const lessonById = new Map(bundle.lessons.map((lesson) => [lesson.id, lesson]));
+  const distractorById = new Map(bundle.distractorSets.map((set) => [set.id, set]));
 
   for (const item of bundle.vocabItems) {
     if (item.status !== 'approved') {
@@ -118,11 +131,36 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
       });
     }
 
+    const topic = topicById.get(item.topicId);
+    if (!topic || topic.status !== 'approved') {
+      issues.push({
+        code: 'reference_invalid',
+        path: `vocabItems.${item.id}.topicId`,
+        message: `Item "${item.id}" must reference an approved topic.`,
+      });
+    }
+
+    if (!item.distractorSetId || !distractorById.has(item.distractorSetId)) {
+      issues.push({
+        code: 'reference_invalid',
+        path: `vocabItems.${item.id}.distractorSetId`,
+        message: `Item "${item.id}" must reference an existing distractor set.`,
+      });
+    }
+
     if (item.translationRu.trim().length === 0 || /^(todo|tbd|xxx)$/i.test(item.translationRu)) {
       issues.push({
         code: 'translation_incomplete',
         path: `vocabItems.${item.id}.translationRu`,
         message: `Item "${item.id}" has incomplete Russian translation.`,
+      });
+    }
+
+    if (!hasCompleteExample(item)) {
+      issues.push({
+        code: 'example_incomplete',
+        path: `vocabItems.${item.id}.exampleSentence`,
+        message: `Item "${item.id}" must include complete French and Russian example sentences.`,
       });
     }
 
@@ -169,6 +207,108 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
     }
   }
 
+  for (const topic of bundle.topics) {
+    if (topic.status !== 'approved') {
+      issues.push({
+        code: 'status_not_approved',
+        path: `topics.${topic.id}.status`,
+        message: `Topic "${topic.id}" must be approved.`,
+      });
+    }
+
+    if (topic.parentTopicId) {
+      const parent = topicById.get(topic.parentTopicId);
+      if (!parent || parent.status !== 'approved') {
+        issues.push({
+          code: 'reference_invalid',
+          path: `topics.${topic.id}.parentTopicId`,
+          message: `Topic "${topic.id}" must reference an approved parent topic.`,
+        });
+      }
+    }
+  }
+
+  for (const lesson of bundle.lessons) {
+    if (lesson.status !== 'approved') {
+      issues.push({
+        code: 'status_not_approved',
+        path: `lessons.${lesson.id}.status`,
+        message: `Lesson "${lesson.id}" must be approved.`,
+      });
+    }
+
+    for (const topicId of lesson.topicIds) {
+      const topic = topicById.get(topicId);
+      if (!topic || topic.status !== 'approved') {
+        issues.push({
+          code: 'reference_invalid',
+          path: `lessons.${lesson.id}.topicIds`,
+          message: `Lesson "${lesson.id}" must reference approved topics.`,
+        });
+      }
+    }
+
+    for (const contentRef of lesson.contentRefs) {
+      const item = itemById.get(contentRef.itemId);
+      if (!item || item.status !== 'approved') {
+        issues.push({
+          code: 'reference_invalid',
+          path: `lessons.${lesson.id}.contentRefs.${contentRef.itemId}`,
+          message: `Lesson "${lesson.id}" must reference approved vocab items.`,
+        });
+        continue;
+      }
+
+      if (contentRef.cardType !== mapItemTypeToCardType(item.itemType)) {
+        issues.push({
+          code: 'card_type_incompatible',
+          path: `lessons.${lesson.id}.contentRefs.${contentRef.itemId}.cardType`,
+          message: `Lesson "${lesson.id}" has incompatible card type for "${item.id}".`,
+        });
+      }
+    }
+  }
+
+  for (const level of bundle.levels) {
+    if (level.status !== 'approved') {
+      issues.push({
+        code: 'status_not_approved',
+        path: `levels.${level.id}.status`,
+        message: `Level "${level.id}" must be approved.`,
+      });
+    }
+
+    for (const topicId of level.topicIds) {
+      const topic = topicById.get(topicId);
+      if (!topic || topic.status !== 'approved' || !topic.cefrLevels.includes(level.cefrLevel)) {
+        issues.push({
+          code: 'reference_invalid',
+          path: `levels.${level.id}.topicIds.${topicId}`,
+          message: `Level "${level.id}" must reference approved topics that include its CEFR level.`,
+        });
+      }
+    }
+
+    for (const lessonId of level.lessonIds) {
+      const lesson = lessonById.get(lessonId);
+      if (!lesson || lesson.status !== 'approved' || lesson.cefrLevel !== level.cefrLevel) {
+        issues.push({
+          code: 'reference_invalid',
+          path: `levels.${level.id}.lessonIds.${lessonId}`,
+          message: `Level "${level.id}" must reference approved lessons for the same CEFR level.`,
+        });
+      }
+    }
+  }
+
+  for (const duplicate of findHighRiskDuplicateTranslations(bundle.vocabItems)) {
+    issues.push({
+      code: 'duplicate_translation_review',
+      path: `vocabItems.translationRu.${duplicate.translationRu}`,
+      message: `Russian translation "${duplicate.translationRu}" maps to multiple answer labels: ${duplicate.answerLabels.join(', ')}.`,
+    });
+  }
+
   for (const set of bundle.distractorSets) {
     if (set.status !== 'approved') {
       issues.push({
@@ -212,6 +352,14 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
 
       if (option.isCorrect) {
         correctCount += 1;
+        const expectedCorrectLabel = expectedAnswerLabel(sourceItem, set.answerLanguage, set.cardType);
+        if (normalizeOptionLabel(option.label) !== normalizeOptionLabel(expectedCorrectLabel)) {
+          issues.push({
+            code: 'linked_option_mismatch',
+            path: `distractorSets.${set.id}.options.${option.id}`,
+            message: `Correct option "${option.id}" does not match source item "${sourceItem.id}".`,
+          });
+        }
       }
 
       if (!option.isCorrect && option.linkedItemId === sourceItem.id) {
@@ -220,6 +368,27 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
           path: `distractorSets.${set.id}.options.${option.id}`,
           message: `Distractor set "${set.id}" links a wrong option back to its source item.`,
         });
+      }
+
+      if (option.linkedItemId) {
+        const linkedItem = itemById.get(option.linkedItemId);
+        if (!linkedItem) {
+          issues.push({
+            code: 'reference_invalid',
+            path: `distractorSets.${set.id}.options.${option.id}.linkedItemId`,
+            message: `Option "${option.id}" must link to an existing vocab item.`,
+          });
+          continue;
+        }
+
+        const expectedLinkedLabel = expectedAnswerLabel(linkedItem, set.answerLanguage, set.cardType);
+        if (normalizeOptionLabel(option.label) !== normalizeOptionLabel(expectedLinkedLabel)) {
+          issues.push({
+            code: 'linked_option_mismatch',
+            path: `distractorSets.${set.id}.options.${option.id}`,
+            message: `Option "${option.id}" label does not match linked item "${linkedItem.id}".`,
+          });
+        }
       }
     }
 
@@ -233,6 +402,52 @@ export function findPhase11LaunchIssues(bundle: EditorialImportBundle): readonly
   }
 
   return issues;
+}
+
+function hasCompleteExample(item: VocabItem): boolean {
+  return isCompleteText(item.exampleSentence.fr) && isCompleteText(item.exampleSentence.ru);
+}
+
+function isCompleteText(value: string): boolean {
+  return value.trim().length > 0 && !/\b(?:todo|tbd|xxx)\b/i.test(value);
+}
+
+function expectedAnswerLabel(item: VocabItem, answerLanguage: string, cardType: DistractorSet['cardType']): string {
+  if (answerLanguage === 'ru') {
+    return item.translationRu;
+  }
+
+  if (cardType === 'article_noun') {
+    return renderArticleNoun(item.article ?? '', item.lemma);
+  }
+
+  return item.surfaceForm;
+}
+
+function findHighRiskDuplicateTranslations(items: readonly VocabItem[]): readonly Readonly<{
+  translationRu: string;
+  answerLabels: readonly string[];
+}>[] {
+  const groups = new Map<string, Set<string>>();
+
+  for (const item of items) {
+    const key = [
+      item.cefrLevel,
+      item.partOfSpeech,
+      item.itemType,
+      normalizeRussianLabel(item.translationRu),
+    ].join('::');
+    const labels = groups.get(key) ?? new Set<string>();
+    labels.add(normalizeOptionLabel(expectedAnswerLabel(item, 'fr', mapItemTypeToCardType(item.itemType))));
+    groups.set(key, labels);
+  }
+
+  return [...groups.entries()]
+    .filter(([, labels]) => labels.size > 1)
+    .map(([key, labels]) => ({
+      translationRu: key.split('::').at(-1) ?? key,
+      answerLabels: [...labels].sort(),
+    }));
 }
 
 function normalizeSourceEntries(entries: readonly Phase11SourceEntry[]): readonly NormalizedSourceEntry[] {
@@ -417,6 +632,10 @@ function mapItemTypeToCardType(itemType: VocabItem['itemType']): DistractorSet['
 
 function normalizeOptionLabel(label: string): string {
   return label.trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
+}
+
+function normalizeRussianLabel(label: string): string {
+  return label.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ru');
 }
 
 function isNounLike(item: Readonly<{ partOfSpeech: VocabItem['partOfSpeech']; itemType: VocabItem['itemType'] }>): boolean {

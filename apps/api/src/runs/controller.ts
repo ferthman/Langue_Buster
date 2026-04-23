@@ -4,7 +4,6 @@ import type {
   RunFinishResponse,
   RunMoveRequest,
   RunResultResponse,
-  RunStartRequest,
   RunStateResponse,
 } from '@langue-buster/shared';
 import {
@@ -168,41 +167,41 @@ export function createUnavailableRunController(message: string) {
   };
 
   return {
-    async handleStart(): Promise<RunHttpResult> {
-      return {
+    handleStart(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleAnswer(): Promise<RunHttpResult> {
-      return {
+    handleAnswer(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleMove(): Promise<RunHttpResult> {
-      return {
+    handleMove(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleFinish(): Promise<RunHttpResult> {
-      return {
+    handleFinish(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleGetRun(): Promise<RunHttpResult> {
-      return {
+    handleGetRun(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleGetResult(): Promise<RunHttpResult> {
-      return {
+    handleGetResult(): Promise<RunHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
   };
 }

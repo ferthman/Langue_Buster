@@ -179,6 +179,52 @@ describe('App bootstrap and routing', () => {
     expect(await screen.findByText('Привет, Mila')).toBeTruthy();
   });
 
+  it('restores an active run CTA after Telegram reopen', async () => {
+    window.localStorage.setItem('langue-buster.onboardingSeen', 'true');
+    window.localStorage.setItem('langue-buster.focusLevel', 'A1');
+    window.localStorage.setItem('langue-buster.activeRunId', 'run-1');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/auth/')) {
+          return Promise.resolve(jsonResponse(sessionResponse()));
+        }
+
+        if (url.includes('/review/queue')) {
+          return Promise.resolve(jsonResponse({ items: [] }));
+        }
+
+        if (url.includes('/runs/run-1')) {
+          return Promise.resolve(jsonResponse({
+            run: {
+              ...activeRunResponse().run,
+              status: 'awaiting_move',
+            },
+          }));
+        }
+
+        return Promise.reject(new Error(`Unexpected fetch for ${url}`));
+      }),
+    );
+
+    renderApp('/');
+
+    expect(await screen.findByText('Привет, Mila')).toBeTruthy();
+    expect(await screen.findByText('Продолжить ран')).toBeTruthy();
+  });
+
+  it('applies Telegram dark theme variables during bootstrap', async () => {
+    mockFetchSequence([sessionResponse()]);
+
+    renderApp('/');
+
+    expect(await screen.findByText('Как работает петля игры')).toBeTruthy();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(document.documentElement.style.getPropertyValue('--tg-bg-color')).toBe('#101010');
+    expect(document.documentElement.style.getPropertyValue('--tg-text-color')).toBe('#ffffff');
+  });
+
   it('loads the review empty state', async () => {
     window.localStorage.setItem('langue-buster.onboardingSeen', 'true');
     window.localStorage.setItem('langue-buster.focusLevel', 'A1');
@@ -425,6 +471,23 @@ describe('App bootstrap and routing', () => {
     await userEvent.click(screen.getByText('Следующая карточка'));
     expect(await screen.findByText('Пока ничего не нужно повторять')).toBeTruthy();
   });
+
+  it('recovers from stale review question mismatches by refetching the queue', async () => {
+    window.localStorage.setItem('langue-buster.onboardingSeen', 'true');
+    window.localStorage.setItem('langue-buster.focusLevel', 'A1');
+    mockFetchSequence(
+      [sessionResponse()],
+      [{ items: [reviewQueueItem()] }],
+      [{ status: 409, body: { code: 'review_question_mismatch', message: 'stale question' } }],
+      [{ items: [] }],
+    );
+
+    renderApp('/review');
+
+    expect(await screen.findByText('яблоко')).toBeTruthy();
+    await userEvent.click(screen.getByText('pomme'));
+    expect(await screen.findByText('Пока ничего не нужно повторять')).toBeTruthy();
+  });
 });
 
 function renderApp(path: string) {
@@ -448,13 +511,15 @@ function mockFetchSequence(...responses: Array<ArrayLikeResponse | ArrayLikeResp
       continue;
     }
 
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify(entry), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    fetchMock.mockResolvedValueOnce(jsonResponse(entry));
   }
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 type ArrayLikeResponse =
@@ -463,3 +528,103 @@ type ArrayLikeResponse =
       body: unknown;
     }
   | Record<string, unknown>;
+
+function sessionResponse() {
+  return {
+    user: {
+      id: 'user-1',
+      telegramUserId: '123',
+      firstName: 'Mila',
+      isPremium: false,
+      createdAt: '2026-04-23T00:00:00.000Z',
+      lastLoginAt: '2026-04-23T00:00:00.000Z',
+    },
+    session: {
+      id: 'session-1',
+      token: 'token-1',
+      userId: 'user-1',
+      issuedAt: '2026-04-23T00:00:00.000Z',
+      expiresAt: '2026-04-23T05:00:00.000Z',
+    },
+  };
+}
+
+function activeRunResponse() {
+  return {
+    run: {
+      id: 'run-1',
+      userId: 'user-1',
+      levelId: 'A1',
+      direction: 'ru_to_fr',
+      status: 'active',
+      heartsRemaining: 3,
+      score: 0,
+      combo: 0,
+      seed: 1,
+      engineState: {
+        board: { width: 8, height: 8, cells: Array.from({ length: 64 }, () => 'empty') },
+        tray: [
+          { instanceId: 'p-1', pieceId: 'single_1' },
+          { instanceId: 'p-2', pieceId: 'bar_h_2' },
+          { instanceId: 'p-3', pieceId: 'bar_v_2' },
+        ],
+        rng: { seed: 1, cursor: 3 },
+        score: 0,
+        combo: 0,
+        turn: 0,
+        lastClearCount: 0,
+        clearedLinesTotal: 0,
+      },
+      currentQuestionState: {
+        sequence: 0,
+        question: reviewQuestion(),
+        shownAt: '2026-04-23T00:00:00.000Z',
+        answerState: 'awaiting_answer',
+      },
+      answerCount: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      moveCount: 0,
+      startedAt: '2026-04-23T00:00:00.000Z',
+    },
+  };
+}
+
+function reviewQueueItem() {
+  return {
+    userId: 'user-1',
+    sourceItemId: 'vocab.a1.apple',
+    cefrLevel: 'A1',
+    masteryState: 'weak',
+    nextReviewAt: '2026-04-23T00:00:00.000Z',
+    priority: 100,
+    reason: 'weak_item',
+    topicId: 'topic.food',
+    question: reviewQuestion(),
+    createdAt: '2026-04-22T00:00:00.000Z',
+    updatedAt: '2026-04-22T00:00:00.000Z',
+  };
+}
+
+function reviewQuestion() {
+  return {
+    id: 'q-1',
+    cardType: 'single_word_translation',
+    promptLanguage: 'ru',
+    answerLanguage: 'fr',
+    promptText: 'яблоко',
+    options: [
+      { id: 'opt-1', label: 'pomme', isCorrect: true },
+      { id: 'opt-2', label: 'poire', isCorrect: false },
+    ],
+    correctOptionId: 'opt-1',
+    sourceItemIds: ['vocab.a1.apple'],
+    cefrLevel: 'A1',
+    meta: {
+      sourceItemId: 'vocab.a1.apple',
+      topicId: 'topic.food',
+      distractorSource: 'linked_set',
+      generatorVersion: 'phase8-v1',
+    },
+  };
+}

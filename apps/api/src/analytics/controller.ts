@@ -125,20 +125,20 @@ export function createUnavailableAnalyticsController(message: string) {
   });
 
   return {
-    async handleIngest(): Promise<AnalyticsHttpResult> {
-      return { status: 503, body };
+    handleIngest(): Promise<AnalyticsHttpResult> {
+      return Promise.resolve({ status: 503, body });
     },
-    async handleOverview(): Promise<AnalyticsHttpResult> {
-      return { status: 503, body };
+    handleOverview(): Promise<AnalyticsHttpResult> {
+      return Promise.resolve({ status: 503, body });
     },
-    async handleFunnels(): Promise<AnalyticsHttpResult> {
-      return { status: 503, body };
+    handleFunnels(): Promise<AnalyticsHttpResult> {
+      return Promise.resolve({ status: 503, body });
     },
-    async handleContent(): Promise<AnalyticsHttpResult> {
-      return { status: 503, body };
+    handleContent(): Promise<AnalyticsHttpResult> {
+      return Promise.resolve({ status: 503, body });
     },
-    async handleRetention(): Promise<AnalyticsHttpResult> {
-      return { status: 503, body };
+    handleRetention(): Promise<AnalyticsHttpResult> {
+      return Promise.resolve({ status: 503, body });
     },
   };
 }

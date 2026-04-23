@@ -80,17 +80,17 @@ export function createUnavailableMasteryController(message: string) {
   };
 
   return {
-    async handleGetQueue(): Promise<MasteryHttpResult> {
-      return {
+    handleGetQueue(): Promise<MasteryHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
-    async handleAnswer(): Promise<MasteryHttpResult> {
-      return {
+    handleAnswer(): Promise<MasteryHttpResult> {
+      return Promise.resolve({
         status: 503,
         body,
-      };
+      });
     },
   };
 }
