@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/import/page": "/import",
+  "/lessons/[id]/page": "/lessons/[id]",
+  "/lessons/page": "/lessons",
+  "/topics/page": "/topics",
+  "/topics/[id]/page": "/topics/[id]",
+  "/vocab-items/[id]/page": "/vocab-items/[id]",
+  "/vocab-items/page": "/vocab-items",
+  "/page": "/",
+  "/history/page": "/history"
+}

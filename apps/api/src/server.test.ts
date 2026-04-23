@@ -64,6 +64,9 @@ describe('mounted auth and run routes', () => {
         runResult: 'GET /runs/:runId/result',
         reviewQueue: 'GET /review/queue',
         reviewAnswer: 'POST /review/answer',
+        adminVocabItems: 'GET /admin/vocab-items',
+        adminImport: 'POST /admin/import/validate',
+        adminHistory: 'GET /admin/history',
       },
     });
   });
@@ -477,6 +480,276 @@ describe('mounted auth and run routes', () => {
     expect(runLookup.status).toBe(200);
     expect((runLookup.body as { run: { id: string } }).run.id).toBe(started.id);
   });
+
+  it('rejects admin CMS access for authenticated non-admin users', async () => {
+    const handler = createHandler();
+    const token = getToken((await authenticate(handler, '123456')).body);
+
+    const response = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/vocab-items',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect((response.body as { code: string }).code).toBe('admin_forbidden');
+  });
+
+  it('validates import bundles and rejects broken content clearly', async () => {
+    const handler = createHandler();
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+
+    const response = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/import/validate',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        bundle: {
+          version: 'phase10-cms-v1',
+          exportedAt: fixedNow.toISOString(),
+          sourceLabel: 'broken-bundle',
+          levels: [],
+          topics: [],
+          lessons: [],
+          vocabItems: [{ id: 'bonjour' }],
+          distractorSets: [],
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect((response.body as { success: boolean }).success).toBe(false);
+    expect((response.body as { issues: Array<{ path: string }> }).issues.length).toBeGreaterThan(0);
+  });
+
+  it('applies valid imports, supports preview and QA flags, and records audit history', async () => {
+    const handler = createHandler();
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+    const bundle = createValidImportBundle();
+
+    const applyResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/import/apply',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        bundle,
+      },
+    });
+
+    expect(applyResponse.status).toBe(200);
+    expect((applyResponse.body as { counts: { vocabItems: number } }).counts.vocabItems).toBe(3);
+
+    const listResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/vocab-items?levelId=A1&status=approved',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(listResponse.status).toBe(200);
+    expect((listResponse.body as { items: Array<{ id: string }> }).items.map((item) => item.id)).toContain('bonjour');
+
+    const previewResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/preview/vocab-items/bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(previewResponse.status).toBe(200);
+    expect((previewResponse.body as { question: { options: Array<unknown> } }).question.options.length).toBeGreaterThanOrEqual(2);
+
+    const flagResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/qa-flags',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        entityType: 'vocab_item',
+        entityId: 'bonjour',
+        flagType: 'needs_review',
+        note: 'Check distractor quality.',
+      },
+    });
+
+    expect(flagResponse.status).toBe(200);
+    const flagId = (flagResponse.body as { flag: { id: string } }).flag.id;
+
+    const resolveResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/admin/qa-flags/${flagId}/resolve`,
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(resolveResponse.status).toBe(200);
+
+    const bulkResponse = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/vocab-items/bulk-update',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        ids: ['bonjour'],
+        status: 'archived',
+      },
+    });
+
+    expect(bulkResponse.status).toBe(200);
+    expect((bulkResponse.body as { updatedIds: string[] }).updatedIds).toEqual(['bonjour']);
+
+    const detailResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/vocab-items/bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(detailResponse.status).toBe(200);
+    expect((detailResponse.body as { item: { status: string } }).item.status).toBe('archived');
+
+    const historyResponse = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/history?entityType=vocab_item&entityId=bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+
+    expect(historyResponse.status).toBe(200);
+    expect((historyResponse.body as { entries: Array<{ actionType: string }> }).entries.some((entry) => entry.actionType === 'bulk_update')).toBe(true);
+  });
+
+  it('rejects malformed content updates and invalid status transitions', async () => {
+    const handler = createHandler();
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+    const bundle = createValidImportBundle();
+
+    await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/import/apply',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        bundle,
+      },
+    });
+
+    const malformedUpdate = await dispatchJson(handler, {
+      method: 'PATCH',
+      url: '/admin/vocab-items/bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        item: {
+          ...bundle.vocabItems[0],
+          translationRu: '',
+        },
+      },
+    });
+
+    expect(malformedUpdate.status).toBe(400);
+    expect((malformedUpdate.body as { code: string }).code).toBe('content_validation_failed');
+
+    const archiveResponse = await dispatchJson(handler, {
+      method: 'PATCH',
+      url: '/admin/vocab-items/bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        item: {
+          ...bundle.vocabItems[0],
+          status: 'archived',
+        },
+      },
+    });
+
+    expect(archiveResponse.status).toBe(200);
+
+    const invalidTransition = await dispatchJson(handler, {
+      method: 'PATCH',
+      url: '/admin/vocab-items/bonjour',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        item: {
+          ...bundle.vocabItems[0],
+          status: 'draft',
+        },
+      },
+    });
+
+    expect(invalidTransition.status).toBe(409);
+    expect((invalidTransition.body as { code: string }).code).toBe('content_conflict');
+  });
+
+  it('rejects invalid topic and lesson payloads through the editor API', async () => {
+    const handler = createHandler();
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+
+    const invalidTopic = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/topics',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        item: {
+          id: 'topic_bad',
+          slug: 'Bad Slug',
+          title: 'Broken topic',
+          cefrLevels: ['A1', 'A1'],
+          status: 'draft',
+          editorialMetadata: {},
+        },
+      },
+    });
+
+    expect(invalidTopic.status).toBe(400);
+    expect((invalidTopic.body as { code: string }).code).toBe('content_validation_failed');
+
+    const invalidLesson = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/admin/lessons',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        item: {
+          id: 'lesson_bad',
+          slug: 'lesson-bad',
+          title: 'Broken lesson',
+          cefrLevel: 'A1',
+          topicIds: ['topic_missing'],
+          contentRefs: [
+            { itemId: 'bonjour', order: 1, cardType: 'single_word' },
+            { itemId: 'salut', order: 1, cardType: 'single_word' },
+          ],
+          status: 'draft',
+          editorialMetadata: {},
+        },
+      },
+    });
+
+    expect(invalidLesson.status).toBe(400);
+    expect((invalidLesson.body as { code: string }).code).toBe('content_validation_failed');
+  });
 });
 
 function createHandler(options?: {
@@ -493,6 +766,8 @@ function createHandler(options?: {
       PORT: '0',
       API_BASE_URL: 'http://localhost:4000',
       MINIAPP_BASE_URL: 'http://localhost:3000',
+      ADMIN_BASE_URL: 'http://localhost:3001',
+      ADMIN_ALLOWED_TELEGRAM_USER_IDS: '999999',
       POSTGRES_URL: 'postgres://test/test',
     },
     now: () => fixedNow,
@@ -595,4 +870,127 @@ function createSignedInitData(input: {
   const hash = computeTelegramInitDataHash(initDataWithoutHash, testBotToken);
 
   return `${initDataWithoutHash}&hash=${hash}`;
+}
+
+function createValidImportBundle() {
+  return {
+    version: 'phase10-cms-v1',
+    exportedAt: fixedNow.toISOString(),
+    sourceLabel: 'test-import',
+    levels: [
+      {
+        id: 'A1',
+        cefrLevel: 'A1',
+        title: 'A1',
+        description: 'Starter level',
+        order: 1,
+        topicIds: ['topic_greetings'],
+        lessonIds: ['lesson_greetings'],
+        status: 'approved',
+        editorialMetadata: {},
+      },
+    ],
+    topics: [
+      {
+        id: 'topic_greetings',
+        slug: 'greetings',
+        title: 'Приветствия',
+        description: 'Basic greetings',
+        cefrLevels: ['A1'],
+        status: 'approved',
+        editorialMetadata: {},
+      },
+    ],
+    lessons: [
+      {
+        id: 'lesson_greetings',
+        slug: 'greetings-intro',
+        title: 'Первые слова',
+        description: 'Lesson intro',
+        cefrLevel: 'A1',
+        topicIds: ['topic_greetings'],
+        contentRefs: [
+          { itemId: 'bonjour', order: 1, cardType: 'single_word' },
+          { itemId: 'salut', order: 2, cardType: 'single_word' },
+          { itemId: 'merci', order: 3, cardType: 'single_word' },
+        ],
+        status: 'approved',
+        editorialMetadata: {},
+      },
+    ],
+    vocabItems: [
+      createVocabItem({
+        id: 'bonjour',
+        lemma: 'bonjour',
+        surfaceForm: 'bonjour',
+        translationRu: 'здравствуйте',
+        distractorSetId: 'set_bonjour',
+      }),
+      createVocabItem({
+        id: 'salut',
+        lemma: 'salut',
+        surfaceForm: 'salut',
+        translationRu: 'привет',
+      }),
+      createVocabItem({
+        id: 'merci',
+        lemma: 'merci',
+        surfaceForm: 'merci',
+        translationRu: 'спасибо',
+      }),
+    ],
+    distractorSets: [
+      {
+        id: 'set_bonjour',
+        cardType: 'single_word',
+        promptLanguage: 'ru',
+        answerLanguage: 'fr',
+        options: [
+          { id: 'option:bonjour', label: 'bonjour', isCorrect: true, linkedItemId: 'bonjour' },
+          { id: 'option:salut', label: 'salut', isCorrect: false, linkedItemId: 'salut' },
+          { id: 'option:merci', label: 'merci', isCorrect: false, linkedItemId: 'merci' },
+        ],
+        sourceItemId: 'bonjour',
+        cefrLevel: 'A1',
+        status: 'approved',
+        editorialMetadata: {},
+      },
+    ],
+  } as const;
+}
+
+function createVocabItem(input: {
+  id: string;
+  lemma: string;
+  surfaceForm: string;
+  translationRu: string;
+  distractorSetId?: string;
+}) {
+  return {
+    id: input.id,
+    language: 'fr',
+    itemType: 'word',
+    partOfSpeech: 'interjection',
+    cefrLevel: 'A1',
+    lemma: input.lemma,
+    surfaceForm: input.surfaceForm,
+    translationRu: input.translationRu,
+    translations: [],
+    topicId: 'topic_greetings',
+    tags: [],
+    exampleSentence: {
+      fr: `${input.surfaceForm}!`,
+      ru: `${input.translationRu}!`,
+    },
+    exampleSentences: [],
+    distractorSetId: input.distractorSetId,
+    distractorHints: [],
+    source: {
+      label: 'Editorial seed',
+      kind: 'editorial',
+    },
+    frequencyScore: 10,
+    status: 'approved',
+    editorialMetadata: {},
+  } as const;
 }

@@ -16,6 +16,8 @@ import { createRunContentRepository } from './runs/content.js';
 import { createRunModule } from './runs/index.js';
 import { createUnavailableRunController, type RunController } from './runs/controller.js';
 import { PostgresAnswerEventRepository, PostgresRunResultRepository } from './runs/repositories.js';
+import { createContentAdminModule } from './content-admin/index.js';
+import { createUnavailableContentAdminController, type ContentAdminController } from './content-admin/controller.js';
 
 type CreateApiServerOptions = {
   env: Record<string, string | undefined>;
@@ -52,8 +54,11 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
       authController: modules.authController,
       runController: modules.runController,
       masteryController: modules.masteryController,
+      contentAdminController: modules.contentAdminController,
       authConfigured,
-      miniAppBaseUrl: options.env.MINIAPP_BASE_URL,
+      allowedOrigins: [options.env.MINIAPP_BASE_URL, options.env.ADMIN_BASE_URL]
+        .map((origin) => origin?.trim())
+        .filter((origin): origin is string => Boolean(origin)),
     }).catch(() => {
       sendJson(response, 500, {
         code: 'run_unavailable',
@@ -73,11 +78,12 @@ export function createApiServer(options: CreateApiServerOptions): Server {
 
 function createApiModules(
   options: CreateApiServerOptions,
-  client: Pick<DatabaseClient, 'query'>,
+  client: DatabaseClient,
 ): {
   authController: AuthController;
   runController: RunController;
   masteryController: MasteryController;
+  contentAdminController: ContentAdminController;
 } {
   try {
     const authRepositories = createPostgresAuthRepositories(client, {
@@ -111,11 +117,18 @@ function createApiModules(
       seedGenerator: options.seedGenerator,
       masteryUpdater: masteryModule.service,
     });
+    const contentAdminModule = createContentAdminModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      env: options.env,
+      now: options.now,
+    });
 
     return {
       authController: authModule.controller,
       runController: runModule.controller,
       masteryController: masteryModule.controller,
+      contentAdminController: contentAdminModule.controller,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'API runtime is unavailable.';
@@ -123,6 +136,7 @@ function createApiModules(
       authController: createUnavailableAuthController(message),
       runController: createUnavailableRunController(message),
       masteryController: createUnavailableMasteryController(message),
+      contentAdminController: createUnavailableContentAdminController(message),
     };
   }
 }
@@ -134,19 +148,19 @@ async function routeRequest(
     authController: AuthController;
     runController: RunController;
     masteryController: MasteryController;
+    contentAdminController: ContentAdminController;
     authConfigured: boolean;
-    miniAppBaseUrl?: string;
+    allowedOrigins: readonly string[];
   },
 ) {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
   const originHeader = request.headers.origin;
   const requestOrigin = typeof originHeader === 'string' ? originHeader : originHeader?.[0];
-  const allowedOrigin = options.authConfigured ? options.miniAppBaseUrl : undefined;
 
   applyCors(response, {
     origin: requestOrigin,
-    allowedOrigin,
+    allowedOrigins: options.allowedOrigins,
   });
 
   if (method === 'OPTIONS') {
@@ -175,6 +189,9 @@ async function routeRequest(
         runResult: 'GET /runs/:runId/result',
         reviewQueue: 'GET /review/queue',
         reviewAnswer: 'POST /review/answer',
+        adminVocabItems: 'GET /admin/vocab-items',
+        adminImport: 'POST /admin/import/validate',
+        adminHistory: 'GET /admin/history',
       },
     });
     return;
@@ -212,6 +229,144 @@ async function routeRequest(
   if (method === 'POST' && url.pathname === '/review/answer') {
     const body = await readJsonBody(request);
     const result = await options.masteryController.handleAnswer(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/vocab-items') {
+    const result = await options.contentAdminController.handleListVocabItems(
+      Object.fromEntries(url.searchParams.entries()),
+      authorizationHeader,
+    );
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/vocab-items') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleSaveVocabItem(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/vocab-items/bulk-update') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleBulkUpdateVocabItems(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/topics') {
+    const result = await options.contentAdminController.handleListTopics(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/topics') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleSaveTopic(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/lessons') {
+    const result = await options.contentAdminController.handleListLessons(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/lessons') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleSaveLesson(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/import/validate') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleValidateImport(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/import/apply') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleApplyImport(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/history') {
+    const result = await options.contentAdminController.handleGetHistory(
+      Object.fromEntries(url.searchParams.entries()),
+      authorizationHeader,
+    );
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/admin/qa-flags') {
+    const body = await readJsonBody(request);
+    const result = await options.contentAdminController.handleCreateQaFlag(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  const qaFlagResolveRoute = url.pathname.match(/^\/admin\/qa-flags\/([^/]+)\/resolve$/);
+  if (method === 'POST' && qaFlagResolveRoute) {
+    const [, flagId] = qaFlagResolveRoute;
+    const result = await options.contentAdminController.handleResolveQaFlag(flagId ?? '', authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  const adminEntityRoute = url.pathname.match(/^\/admin\/(vocab-items|topics|lessons)\/([^/]+)$/);
+  if (adminEntityRoute) {
+    const [, entityType, entityId] = adminEntityRoute;
+    if (method === 'GET' && entityType === 'vocab-items') {
+      const result = await options.contentAdminController.handleGetVocabItem(entityId ?? '', authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if ((method === 'POST' || method === 'PATCH') && entityType === 'vocab-items') {
+      const body = await readJsonBody(request);
+      const result = await options.contentAdminController.handleSaveVocabItem(body, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'GET' && entityType === 'topics') {
+      const result = await options.contentAdminController.handleGetTopic(entityId ?? '', authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if ((method === 'POST' || method === 'PATCH') && entityType === 'topics') {
+      const body = await readJsonBody(request);
+      const result = await options.contentAdminController.handleSaveTopic(body, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (method === 'GET' && entityType === 'lessons') {
+      const result = await options.contentAdminController.handleGetLesson(entityId ?? '', authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if ((method === 'POST' || method === 'PATCH') && entityType === 'lessons') {
+      const body = await readJsonBody(request);
+      const result = await options.contentAdminController.handleSaveLesson(body, authorizationHeader);
+      sendJson(response, result.status, result.body);
+      return;
+    }
+  }
+
+  const previewRoute = url.pathname.match(/^\/admin\/preview\/vocab-items\/([^/]+)$/);
+  if (method === 'GET' && previewRoute) {
+    const [, vocabItemId] = previewRoute;
+    const result = await options.contentAdminController.handlePreviewVocabItem(vocabItemId ?? '', authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }

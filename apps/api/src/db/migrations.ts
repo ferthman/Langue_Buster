@@ -133,6 +133,105 @@ const phase7SchemaStatements = [
   `
     ALTER TABLE run_results ADD COLUMN IF NOT EXISTS mastery_applied_at TEXT
   `,
+  `
+    CREATE TABLE IF NOT EXISTS content_vocab_items (
+      id TEXT PRIMARY KEY,
+      lemma TEXT NOT NULL,
+      surface_form TEXT NOT NULL,
+      cefr_level TEXT NOT NULL,
+      topic_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      frequency_score INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_actor_user_id TEXT NOT NULL,
+      last_actor_telegram_user_id TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_topics (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      cefr_levels_text TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_actor_user_id TEXT NOT NULL,
+      last_actor_telegram_user_id TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_lessons (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      cefr_level TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_actor_user_id TEXT NOT NULL,
+      last_actor_telegram_user_id TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_distractor_sets (
+      id TEXT PRIMARY KEY,
+      source_item_id TEXT,
+      cefr_level TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_actor_user_id TEXT NOT NULL,
+      last_actor_telegram_user_id TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_levels (
+      id TEXT PRIMARY KEY,
+      cefr_level TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_actor_user_id TEXT NOT NULL,
+      last_actor_telegram_user_id TEXT NOT NULL
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_qa_flags (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      flag_type TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by_user_id TEXT NOT NULL,
+      created_by_telegram_user_id TEXT NOT NULL,
+      resolved_at TEXT,
+      resolved_by_user_id TEXT,
+      resolved_by_telegram_user_id TEXT
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS content_audit_log (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      actor_user_id TEXT NOT NULL,
+      actor_telegram_user_id TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      before_json TEXT,
+      after_json TEXT,
+      meta_json TEXT,
+      occurred_at TEXT NOT NULL
+    )
+  `,
 ] as const;
 
 export async function migratePhase7Schema(client: Pick<DatabaseClient, 'query'>): Promise<void> {

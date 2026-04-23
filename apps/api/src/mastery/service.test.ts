@@ -257,7 +257,7 @@ function createRunSession(runId: string) {
         height: 8,
         cells: Array.from({ length: 64 }, () => 'empty' as const),
       },
-      tray: [null, null, null] as const,
+      tray: [null, null, null] as [null, null, null],
       rng: {
         seed: 777,
         cursor: 3,

@@ -4,14 +4,25 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
-    "dev": "tsc --project tsconfig.json --watch --noEmit",
-    "lint": "eslint src --ext .ts",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "eslint app src --ext .ts,.tsx",
+    "test": "vitest run --config vitest.config.ts --passWithNoTests",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@langue-buster/content-core": "workspace:*",
-    "@langue-buster/shared": "workspace:*"
+    "@langue-buster/shared": "workspace:*",
+    "next": "^15.2.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.14.1",
+    "@types/react": "^19.1.1",
+    "@types/react-dom": "^19.1.2",
+    "jsdom": "^26.1.0"
   }
 }

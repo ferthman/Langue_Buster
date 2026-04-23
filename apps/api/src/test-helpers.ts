@@ -1,12 +1,18 @@
 import { newDb } from 'pg-mem';
 import { Readable } from 'node:stream';
 
+import type { DatabaseClient } from './db/client.js';
 import type { ApiResponse } from './server.js';
+
+type TestPool = DatabaseClient & {
+  end(): Promise<void>;
+};
 
 export function createTestPool() {
   const database = newDb();
   const adapter = database.adapters.createPg();
-  const pool = new adapter.Pool();
+  const PoolConstructor = adapter.Pool as unknown as new () => TestPool;
+  const pool = new PoolConstructor();
 
   return {
     database,
@@ -15,7 +21,7 @@ export function createTestPool() {
       await pool.end();
     },
     createSiblingPool() {
-      return new adapter.Pool();
+      return new PoolConstructor();
     },
   };
 }

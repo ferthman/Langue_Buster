@@ -434,3 +434,260 @@ export const reviewErrorSchema = z.object({
   message: z.string().min(1),
 });
 export type ReviewError = z.infer<typeof reviewErrorSchema>;
+
+export const adminEntityTypeSchema = z.enum(['vocab_item', 'topic', 'lesson', 'distractor_set', 'level']);
+export type AdminEntityType = z.infer<typeof adminEntityTypeSchema>;
+
+export const adminQaFlagTypeSchema = z.enum([
+  'ambiguous',
+  'broken_distractors',
+  'wrong_translation',
+  'invalid_grammar',
+  'needs_review',
+]);
+export type AdminQaFlagType = z.infer<typeof adminQaFlagTypeSchema>;
+
+export const adminQaFlagStatusSchema = z.enum(['active', 'resolved']);
+export type AdminQaFlagStatus = z.infer<typeof adminQaFlagStatusSchema>;
+
+export const adminValidationIssueSchema = z.object({
+  path: z.string().min(1),
+  message: z.string().min(1),
+});
+export type AdminValidationIssue = z.infer<typeof adminValidationIssueSchema>;
+
+export const adminContentPayloadSchema = z.record(z.string(), z.unknown());
+export type AdminContentPayload = z.infer<typeof adminContentPayloadSchema>;
+
+export const adminVocabListSortSchema = z.enum(['updatedAt', 'lemma', 'frequencyScore', 'status']);
+export type AdminVocabListSort = z.infer<typeof adminVocabListSortSchema>;
+
+export const adminSortDirectionSchema = z.enum(['asc', 'desc']).default('desc');
+export type AdminSortDirection = z.infer<typeof adminSortDirectionSchema>;
+
+export const adminVocabListQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  levelId: cefrLevelSchema.optional(),
+  topicId: z.string().trim().min(1).optional(),
+  status: contentStatusSchema.optional(),
+  sortBy: adminVocabListSortSchema.default('updatedAt'),
+  sortDirection: adminSortDirectionSchema,
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+});
+export type AdminVocabListQuery = z.infer<typeof adminVocabListQuerySchema>;
+
+export const adminVocabListItemSchema = z.object({
+  id: z.string().trim().min(1),
+  lemma: z.string().trim().min(1),
+  surfaceForm: z.string().trim().min(1),
+  cefrLevel: cefrLevelSchema,
+  topicId: z.string().trim().min(1),
+  status: contentStatusSchema,
+  frequencyScore: z.number().int().nonnegative(),
+  updatedAt: z.string().datetime(),
+  openQaFlagCount: z.number().int().nonnegative(),
+});
+export type AdminVocabListItem = z.infer<typeof adminVocabListItemSchema>;
+
+export const adminVocabListResponseSchema = z.object({
+  items: z.array(adminVocabListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type AdminVocabListResponse = z.infer<typeof adminVocabListResponseSchema>;
+
+export const adminQaFlagSchema = z.object({
+  id: z.string().trim().min(1),
+  entityType: adminEntityTypeSchema,
+  entityId: z.string().trim().min(1),
+  flagType: adminQaFlagTypeSchema,
+  note: z.string().trim().min(1).optional(),
+  status: adminQaFlagStatusSchema,
+  createdAt: z.string().datetime(),
+  createdByUserId: z.string().trim().min(1),
+  createdByTelegramUserId: z.string().trim().min(1),
+  resolvedAt: z.string().datetime().optional(),
+  resolvedByUserId: z.string().trim().min(1).optional(),
+  resolvedByTelegramUserId: z.string().trim().min(1).optional(),
+});
+export type AdminQaFlag = z.infer<typeof adminQaFlagSchema>;
+
+export const adminAuditLogEntrySchema = z.object({
+  id: z.string().trim().min(1),
+  entityType: adminEntityTypeSchema,
+  entityId: z.string().trim().min(1),
+  actionType: z.string().trim().min(1),
+  actorUserId: z.string().trim().min(1),
+  actorTelegramUserId: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  before: z.unknown().optional(),
+  after: z.unknown().optional(),
+  meta: z.unknown().optional(),
+  occurredAt: z.string().datetime(),
+});
+export type AdminAuditLogEntry = z.infer<typeof adminAuditLogEntrySchema>;
+
+export const adminVocabDetailResponseSchema = z.object({
+  item: adminContentPayloadSchema,
+  qaFlags: z.array(adminQaFlagSchema),
+  history: z.array(adminAuditLogEntrySchema),
+  validationIssues: z.array(adminValidationIssueSchema),
+});
+export type AdminVocabDetailResponse = z.infer<typeof adminVocabDetailResponseSchema>;
+
+export const adminTopicListItemSchema = z.object({
+  id: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  slug: z.string().trim().min(1),
+  status: contentStatusSchema,
+  cefrLevels: z.array(cefrLevelSchema),
+  updatedAt: z.string().datetime(),
+});
+export type AdminTopicListItem = z.infer<typeof adminTopicListItemSchema>;
+
+export const adminTopicListResponseSchema = z.object({
+  items: z.array(adminTopicListItemSchema),
+});
+export type AdminTopicListResponse = z.infer<typeof adminTopicListResponseSchema>;
+
+export const adminTopicDetailResponseSchema = z.object({
+  item: adminContentPayloadSchema,
+  qaFlags: z.array(adminQaFlagSchema),
+  history: z.array(adminAuditLogEntrySchema),
+  validationIssues: z.array(adminValidationIssueSchema),
+});
+export type AdminTopicDetailResponse = z.infer<typeof adminTopicDetailResponseSchema>;
+
+export const adminLessonListItemSchema = z.object({
+  id: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  cefrLevel: cefrLevelSchema,
+  status: contentStatusSchema,
+  topicIds: z.array(z.string().trim().min(1)),
+  updatedAt: z.string().datetime(),
+});
+export type AdminLessonListItem = z.infer<typeof adminLessonListItemSchema>;
+
+export const adminLessonListResponseSchema = z.object({
+  items: z.array(adminLessonListItemSchema),
+});
+export type AdminLessonListResponse = z.infer<typeof adminLessonListResponseSchema>;
+
+export const adminLessonDetailResponseSchema = z.object({
+  item: adminContentPayloadSchema,
+  qaFlags: z.array(adminQaFlagSchema),
+  history: z.array(adminAuditLogEntrySchema),
+  validationIssues: z.array(adminValidationIssueSchema),
+});
+export type AdminLessonDetailResponse = z.infer<typeof adminLessonDetailResponseSchema>;
+
+export const adminVocabUpsertRequestSchema = z.object({
+  item: adminContentPayloadSchema,
+});
+export type AdminVocabUpsertRequest = z.infer<typeof adminVocabUpsertRequestSchema>;
+
+export const adminTopicUpsertRequestSchema = z.object({
+  item: adminContentPayloadSchema,
+});
+export type AdminTopicUpsertRequest = z.infer<typeof adminTopicUpsertRequestSchema>;
+
+export const adminLessonUpsertRequestSchema = z.object({
+  item: adminContentPayloadSchema,
+});
+export type AdminLessonUpsertRequest = z.infer<typeof adminLessonUpsertRequestSchema>;
+
+export const adminImportRequestSchema = z.object({
+  bundle: z.unknown(),
+});
+export type AdminImportRequest = z.infer<typeof adminImportRequestSchema>;
+
+export const adminImportValidateResponseSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    data: z.unknown(),
+  }),
+  z.object({
+    success: z.literal(false),
+    issues: z.array(adminValidationIssueSchema),
+  }),
+]);
+export type AdminImportValidateResponse = z.infer<typeof adminImportValidateResponseSchema>;
+
+export const adminImportApplyResponseSchema = z.object({
+  counts: z.object({
+    levels: z.number().int().nonnegative(),
+    topics: z.number().int().nonnegative(),
+    lessons: z.number().int().nonnegative(),
+    vocabItems: z.number().int().nonnegative(),
+    distractorSets: z.number().int().nonnegative(),
+  }),
+});
+export type AdminImportApplyResponse = z.infer<typeof adminImportApplyResponseSchema>;
+
+export const adminBulkUpdateVocabItemsRequestSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1),
+  status: contentStatusSchema.optional(),
+  topicId: z.string().trim().min(1).optional(),
+  levelId: cefrLevelSchema.optional(),
+  archive: z.boolean().optional(),
+});
+export type AdminBulkUpdateVocabItemsRequest = z.infer<typeof adminBulkUpdateVocabItemsRequestSchema>;
+
+export const adminBulkUpdateVocabItemsResponseSchema = z.object({
+  updatedIds: z.array(z.string().trim().min(1)),
+  skipped: z.array(z.object({
+    id: z.string().trim().min(1),
+    reason: z.string().trim().min(1),
+  })),
+});
+export type AdminBulkUpdateVocabItemsResponse = z.infer<typeof adminBulkUpdateVocabItemsResponseSchema>;
+
+export const adminPreviewResponseSchema = z.object({
+  item: adminContentPayloadSchema,
+  question: generatedQuestionSchema,
+});
+export type AdminPreviewResponse = z.infer<typeof adminPreviewResponseSchema>;
+
+export const adminQaFlagRequestSchema = z.object({
+  entityType: z.enum(['vocab_item', 'topic', 'lesson']),
+  entityId: z.string().trim().min(1),
+  flagType: adminQaFlagTypeSchema,
+  note: z.string().trim().min(1).optional(),
+});
+export type AdminQaFlagRequest = z.infer<typeof adminQaFlagRequestSchema>;
+
+export const adminQaFlagResponseSchema = z.object({
+  flag: adminQaFlagSchema,
+});
+export type AdminQaFlagResponse = z.infer<typeof adminQaFlagResponseSchema>;
+
+export const adminHistoryQuerySchema = z.object({
+  entityType: adminEntityTypeSchema.optional(),
+  entityId: z.string().trim().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+export type AdminHistoryQuery = z.infer<typeof adminHistoryQuerySchema>;
+
+export const adminHistoryResponseSchema = z.object({
+  entries: z.array(adminAuditLogEntrySchema),
+});
+export type AdminHistoryResponse = z.infer<typeof adminHistoryResponseSchema>;
+
+export const adminErrorCodeSchema = z.enum([
+  'admin_forbidden',
+  'content_not_found',
+  'content_validation_failed',
+  'content_import_invalid',
+  'content_publish_blocked',
+  'content_conflict',
+  'admin_unavailable',
+]);
+export type AdminErrorCode = z.infer<typeof adminErrorCodeSchema>;
+
+export const adminErrorSchema = z.object({
+  code: adminErrorCodeSchema,
+  message: z.string().min(1),
+});
+export type AdminError = z.infer<typeof adminErrorSchema>;

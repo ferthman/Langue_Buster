@@ -18,13 +18,13 @@ export function applyCors(
   },
   input: {
     origin?: string;
-    allowedOrigin?: string;
+    allowedOrigins?: readonly string[];
   },
 ): void {
   const allowOrigin =
-    input.origin && input.allowedOrigin && input.origin === input.allowedOrigin
+    input.origin && input.allowedOrigins?.includes(input.origin)
       ? input.origin
-      : input.allowedOrigin;
+      : input.allowedOrigins?.[0];
 
   if (!allowOrigin) {
     return;
