@@ -38,11 +38,20 @@ export type RunHttpResult = {
 
 export type RunController = ReturnType<typeof createRunController>;
 
-export function createRunController(runService: RunService, sessionVerifier: SessionVerifier) {
+export function createRunController(
+  runService: RunService,
+  sessionVerifier: SessionVerifier,
+  options: {
+    verifyPlayerAccess?(authorizationHeader: string | undefined): Promise<import('@langue-buster/shared').SessionVerificationResponse>;
+  } = {},
+) {
+  const verifyPlayerAccess = options.verifyPlayerAccess
+    ? (authorizationHeader: string | undefined) => options.verifyPlayerAccess?.(authorizationHeader)
+    : undefined;
   return {
     async handleStart(body: unknown, authorizationHeader: string | undefined): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const payload = runStartRequestSchema.parse(body);
         const run = await runService.startRun({
           userId: session.user.id,
@@ -67,7 +76,7 @@ export function createRunController(runService: RunService, sessionVerifier: Ses
       authorizationHeader: string | undefined,
     ): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const payload: RunAnswerRequest = runAnswerRequestSchema.parse(body);
         const response = await runService.submitAnswer({
           runId,
@@ -91,7 +100,7 @@ export function createRunController(runService: RunService, sessionVerifier: Ses
       authorizationHeader: string | undefined,
     ): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const payload: RunMoveRequest = runMoveRequestSchema.parse(body);
         const response = await runService.submitMove({
           runId,
@@ -111,7 +120,7 @@ export function createRunController(runService: RunService, sessionVerifier: Ses
 
     async handleFinish(runId: string, authorizationHeader: string | undefined): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const response = await runService.finishRun({
           runId,
           userId: session.user.id,
@@ -128,7 +137,7 @@ export function createRunController(runService: RunService, sessionVerifier: Ses
 
     async handleGetRun(runId: string, authorizationHeader: string | undefined): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const run = await runService.getRunForUser(runId, session.user.id);
 
         return {
@@ -144,7 +153,7 @@ export function createRunController(runService: RunService, sessionVerifier: Ses
 
     async handleGetResult(runId: string, authorizationHeader: string | undefined): Promise<RunHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const result = await runService.getResultForUser(runId, session.user.id);
 
         return {
@@ -206,7 +215,15 @@ export function createUnavailableRunController(message: string) {
   };
 }
 
-async function verifySession(authorizationHeader: string | undefined, sessionVerifier: SessionVerifier) {
+async function verifySession(
+  authorizationHeader: string | undefined,
+  sessionVerifier: SessionVerifier,
+  verifyPlayerAccess?: (authorizationHeader: string | undefined) => Promise<import('@langue-buster/shared').SessionVerificationResponse>,
+) {
+  if (verifyPlayerAccess) {
+    return verifyPlayerAccess(authorizationHeader);
+  }
+
   const token = getBearerToken(authorizationHeader);
   return sessionVerifier.verifySessionToken(token);
 }
@@ -224,11 +241,13 @@ function toErrorResult(error: unknown): RunHttpResult {
 
   const normalizedAuthError = normalizeAuthError(error);
   return {
-    status: normalizedAuthError.code === 'invalid_session' || normalizedAuthError.code === 'missing_session'
-      ? 401
-      : 400,
+    status: normalizedAuthError.code === 'soft_launch_unavailable'
+      ? 403
+      : normalizedAuthError.code === 'invalid_session' || normalizedAuthError.code === 'missing_session'
+        ? 401
+        : 400,
     body: {
-      code: 'run_unavailable',
+      code: normalizedAuthError.code === 'soft_launch_unavailable' ? 'soft_launch_unavailable' : 'run_unavailable',
       message: normalizedAuthError.message,
     },
   };

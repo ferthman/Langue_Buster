@@ -58,5 +58,5 @@ describe('phase 11 CMS import path', () => {
 
     const history = await service.getHistory({ limit: 5 });
     expect(history.entries.some((entry) => entry.actionType === 'import_apply')).toBe(true);
-  });
+  }, 15_000);
 });

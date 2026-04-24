@@ -21,6 +21,7 @@ import type {
   MoveEvent,
   RunResult,
   RunSession,
+  SoftLaunchSettings,
 } from '@langue-buster/shared';
 import { launchLevels, runResultSchema, runSessionSchema } from '@langue-buster/shared';
 import { randomUUID } from 'node:crypto';
@@ -48,6 +49,9 @@ type RunServiceDependencies = {
   };
   analytics?: {
     recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
+  };
+  softLaunchSettings?: {
+    getActiveSettings(): Promise<SoftLaunchSettings>;
   };
   logger?: {
     warn(message: string, context: Record<string, unknown>): void;
@@ -93,6 +97,7 @@ type RunServiceDependencies = {
 export type RunService = ReturnType<typeof createRunService>;
 
 const DEFAULT_HEARTS = 3;
+const DEFAULT_WRONG_ANSWER_HEART_LOSS = 1;
 
 export function createRunService(dependencies: RunServiceDependencies) {
   const now = dependencies.now ?? (() => new Date());
@@ -109,6 +114,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
       }
 
       const startedAt = now().toISOString();
+      const settings = await dependencies.softLaunchSettings?.getActiveSettings();
       const seed = normalizeSeed(seedGenerator());
       const engineState = cloneEngineState(createInitialEngineState({ seed }));
       const questionState = createQuestionState({
@@ -126,7 +132,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         levelId: input.levelId,
         direction: input.direction,
         status: 'active',
-        heartsRemaining: DEFAULT_HEARTS,
+        heartsRemaining: settings?.startingHearts ?? DEFAULT_HEARTS,
         score: 0,
         combo: 0,
         seed,
@@ -197,6 +203,16 @@ export function createRunService(dependencies: RunServiceDependencies) {
         shownAt: questionState.shownAt,
         answeredAt: input.answeredAt,
       });
+      const settings = await dependencies.softLaunchSettings?.getActiveSettings();
+      const effectiveHeartLoss = evaluation.penalty?.applies
+        ? settings?.wrongAnswerHeartLoss ?? DEFAULT_WRONG_ANSWER_HEART_LOSS
+        : 0;
+      const effectivePenalty = evaluation.penalty?.applies
+        ? {
+            ...evaluation.penalty,
+            amount: effectiveHeartLoss,
+          }
+        : evaluation.penalty;
       const occurredAt = input.answeredAt ?? now().toISOString();
       const telemetryEvent = buildAnswerTelemetryEvent({
         question: questionState.question,
@@ -212,7 +228,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         correctOptionId: telemetryEvent.correctOptionId,
         correctness: telemetryEvent.isCorrect,
         timingMs: telemetryEvent.timingMs,
-        penalty: evaluation.penalty,
+        penalty: effectivePenalty,
         occurredAt,
       };
       await dependencies.answerEventRepository.save(answerEvent);
@@ -281,7 +297,7 @@ export function createRunService(dependencies: RunServiceDependencies) {
         };
       }
 
-      const heartsRemaining = Math.max(0, run.heartsRemaining - (evaluation.penalty?.amount ?? 0));
+      const heartsRemaining = Math.max(0, run.heartsRemaining - effectiveHeartLoss);
       const baseRun: RunSession = {
         ...run,
         heartsRemaining,
@@ -305,7 +321,10 @@ export function createRunService(dependencies: RunServiceDependencies) {
 
         return {
           run: finishedRun,
-          evaluation,
+          evaluation: {
+            ...evaluation,
+            penalty: effectivePenalty,
+          },
           result,
         };
       }
@@ -327,7 +346,10 @@ export function createRunService(dependencies: RunServiceDependencies) {
 
       return {
         run: nextRun,
-        evaluation,
+        evaluation: {
+          ...evaluation,
+          penalty: effectivePenalty,
+        },
       };
     },
 

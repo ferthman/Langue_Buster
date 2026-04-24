@@ -323,6 +323,13 @@ export const analyticsIngestResponseSchema = z.object({
 });
 export type AnalyticsIngestResponse = z.infer<typeof analyticsIngestResponseSchema>;
 
+export const analyticsAdminQuerySchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  levelId: analyticsCefrLevelSchema.optional(),
+});
+export type AnalyticsAdminQuery = z.infer<typeof analyticsAdminQuerySchema>;
+
 export const analyticsOverviewSchema = z.object({
   onboardingCompletionCount: z.number().int().nonnegative(),
   onboardingCompletionRate: z.number().min(0).max(1),
@@ -400,6 +407,7 @@ export type AnalyticsRetentionResponse = z.infer<typeof analyticsRetentionRespon
 export const analyticsErrorCodeSchema = z.enum([
   'analytics_invalid_event',
   'analytics_forbidden',
+  'soft_launch_unavailable',
   'analytics_unavailable',
 ]);
 export type AnalyticsErrorCode = z.infer<typeof analyticsErrorCodeSchema>;

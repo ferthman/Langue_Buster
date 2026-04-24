@@ -260,6 +260,22 @@ const phase7SchemaStatements = [
     CREATE INDEX IF NOT EXISTS analytics_events_run_id_idx ON analytics_events (run_id)
   `,
   `
+    CREATE TABLE IF NOT EXISTS soft_launch_settings_snapshots (
+      id TEXT PRIMARY KEY,
+      settings_json TEXT NOT NULL,
+      note TEXT,
+      is_active BOOLEAN NOT NULL,
+      created_at TEXT NOT NULL,
+      created_by_user_id TEXT REFERENCES users (id),
+      created_by_telegram_user_id TEXT
+    )
+  `,
+  `
+    CREATE UNIQUE INDEX IF NOT EXISTS soft_launch_settings_snapshots_active_idx
+    ON soft_launch_settings_snapshots (is_active)
+    WHERE is_active = TRUE
+  `,
+  `
     CREATE INDEX IF NOT EXISTS analytics_events_source_item_id_idx ON analytics_events (source_item_id)
   `,
   `

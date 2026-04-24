@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyticsEventEnvelopeSchema,
+  analyticsAdminQuerySchema,
   analyticsOverviewResponseSchema,
   antiCheatAnomalyListResponseSchema,
   antiCheatAnomalySchema,
@@ -11,6 +12,9 @@ import {
   runResultSchema,
   runSessionSchema,
   runStartRequestSchema,
+  softLaunchLaunchReportSchema,
+  softLaunchStatusSchema,
+  softLaunchTuningBacklogReportSchema,
   userMasterySchema,
 } from './index.js';
 
@@ -188,6 +192,118 @@ describe('shared domain contracts', () => {
           answerAccuracy: 0.75,
           lessonCompletionCount: 0,
         },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      analyticsAdminQuerySchema.parse({
+        from: '2026-04-22T00:00:00.000Z',
+        to: '2026-04-23T00:00:00.000Z',
+        levelId: 'A1',
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates soft-launch status and report payloads', () => {
+    const settings = {
+      startingHearts: 3,
+      wrongAnswerHeartLoss: 1,
+      learningToStableSuccessStreak: 3,
+      stableToMasteredSuccessStreak: 6,
+      learningRequiresCorrectOverWrong: true,
+      masteredMaxWrongCount: 2,
+      weakReviewHours: 2,
+      learningReviewHours: 12,
+      stableReviewDays: 3,
+      masteredReviewDays: 10,
+      weakResurfaceWindowHours: 2,
+    };
+
+    expect(() =>
+      softLaunchStatusSchema.parse({
+        enabled: true,
+        launchLevels: ['A1', 'A2'],
+        allowedUserIdsCount: 4,
+        allowedTelegramUserIdsCount: 8,
+        activeSettings: {
+          id: 'soft_1',
+          settings,
+          note: 'Initial cohort settings',
+          createdAt: '2026-04-24T00:00:00.000Z',
+          createdByUserId: 'usr_1',
+          createdByTelegramUserId: '999999',
+          isActive: true,
+        },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      softLaunchLaunchReportSchema.parse({
+        generatedAt: '2026-04-24T00:00:00.000Z',
+        query: {
+          from: '2026-04-23T00:00:00.000Z',
+          to: '2026-04-24T00:00:00.000Z',
+          levelId: 'A1',
+        },
+        kpis: {
+          onboardingCompletionCount: 5,
+          onboardingCompletionRate: 0.5,
+          firstRunStartCount: 4,
+          firstRunFinishCount: 3,
+          runCompletionCount: 3,
+          runAbandonCount: 1,
+          reviewAdoptionCount: 2,
+          reviewAdoptionRate: 0.5,
+          answerAccuracy: 0.8,
+          averageRunLengthSeconds: 55,
+          runtimeFailureCount: 1,
+        },
+        runtimeFailures: {
+          count: 1,
+          recent: [
+            {
+              eventName: 'user_visible_failure',
+              occurredAt: '2026-04-24T00:00:00.000Z',
+              code: 'run_invalid_state',
+              route: '/run',
+              userId: 'usr_1',
+            },
+          ],
+        },
+        antiCheat: {
+          totalCount: 1,
+          byType: [
+            {
+              type: 'impossible_answer_timing',
+              severity: 'medium',
+              count: 1,
+            },
+          ],
+        },
+        markdownSummary: '# Soft launch\n',
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      softLaunchTuningBacklogReportSchema.parse({
+        generatedAt: '2026-04-24T00:00:00.000Z',
+        query: {},
+        activeSettings: {
+          id: 'soft_1',
+          settings,
+          createdAt: '2026-04-24T00:00:00.000Z',
+          isActive: true,
+        },
+        observedSignals: [
+          {
+            key: 'answerAccuracy',
+            value: 0.8,
+            note: 'Baseline',
+          },
+        ],
+        recommendedAdjustments: ['Keep current penalty curve for first cohort.'],
+        openRisks: ['Small sample size on day 1.'],
+        markdownSummary: '# Tuning\n',
       }),
     ).not.toThrow();
   });

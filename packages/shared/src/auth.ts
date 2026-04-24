@@ -61,6 +61,7 @@ export const authErrorCodeSchema = z.enum([
   'auth_expired',
   'missing_session',
   'invalid_session',
+  'soft_launch_unavailable',
   'auth_unavailable',
 ]);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;

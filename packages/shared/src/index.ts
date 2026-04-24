@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './auth.js';
 export * from './analytics.js';
+export * from './soft-launch.js';
 
 export const cefrLevelSchema = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
 export type CefrLevelId = z.infer<typeof cefrLevelSchema>;
@@ -412,6 +413,7 @@ export const runErrorCodeSchema = z.enum([
   'run_invalid_answer',
   'run_result_unavailable',
   'run_integrity_error',
+  'soft_launch_unavailable',
   'run_unavailable',
 ]);
 export type RunErrorCode = z.infer<typeof runErrorCodeSchema>;
@@ -426,6 +428,7 @@ export const reviewErrorCodeSchema = z.enum([
   'review_item_not_found',
   'review_question_mismatch',
   'review_invalid_answer',
+  'soft_launch_unavailable',
   'review_unavailable',
 ]);
 export type ReviewErrorCode = z.infer<typeof reviewErrorCodeSchema>;
@@ -683,6 +686,7 @@ export const adminErrorCodeSchema = z.enum([
   'content_import_invalid',
   'content_publish_blocked',
   'content_conflict',
+  'soft_launch_unavailable',
   'admin_unavailable',
 ]);
 export type AdminErrorCode = z.infer<typeof adminErrorCodeSchema>;

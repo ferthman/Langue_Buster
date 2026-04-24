@@ -24,6 +24,9 @@ type AuthServiceDependencies = {
   analytics?: {
     recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
   };
+  softLaunchAccess?: {
+    assertUserAccess(userId: string, telegramUserId: string): void;
+  };
 };
 
 type ZodLikeIssue = Readonly<{
@@ -48,6 +51,7 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
       const internalUser = await dependencies.userRepository.createOrUpdateFromTelegramUser(
         validatedAuth.user,
       );
+      dependencies.softLaunchAccess?.assertUserAccess(internalUser.id, internalUser.telegramUserId);
       const session = issueSession(internalUser.id, {
         now,
         ttlSeconds: dependencies.sessionTtlSeconds,

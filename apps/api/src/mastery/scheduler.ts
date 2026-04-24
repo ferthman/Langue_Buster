@@ -1,5 +1,6 @@
 import type {
   MasteryState,
+  SoftLaunchSettings,
   ReviewResurfacingReason,
   UserMastery,
 } from '@langue-buster/shared';
@@ -24,14 +25,35 @@ export type ScheduledMasteryEntry = Readonly<{
   priority: number;
 }>;
 
-const weakReviewMs = 2 * 60 * 60 * 1000;
-const learningReviewMs = 12 * 60 * 60 * 1000;
-const stableReviewMs = 3 * 24 * 60 * 60 * 1000;
-const masteredReviewMs = 10 * 24 * 60 * 60 * 1000;
+export type MasterySchedulerSettings = Pick<
+  SoftLaunchSettings,
+  | 'learningToStableSuccessStreak'
+  | 'stableToMasteredSuccessStreak'
+  | 'learningRequiresCorrectOverWrong'
+  | 'masteredMaxWrongCount'
+  | 'weakReviewHours'
+  | 'learningReviewHours'
+  | 'stableReviewDays'
+  | 'masteredReviewDays'
+  | 'weakResurfaceWindowHours'
+>;
+
+const defaultSettings: MasterySchedulerSettings = {
+  learningToStableSuccessStreak: 3,
+  stableToMasteredSuccessStreak: 6,
+  learningRequiresCorrectOverWrong: true,
+  masteredMaxWrongCount: 2,
+  weakReviewHours: 2,
+  learningReviewHours: 12,
+  stableReviewDays: 3,
+  masteredReviewDays: 10,
+  weakResurfaceWindowHours: 2,
+};
 
 export function applyMasterySignal(
   existing: UserMastery | null,
   signal: MasteryUpdateSignal,
+  settings: MasterySchedulerSettings = defaultSettings,
 ): MasteryUpdateResult {
   const previousState = existing?.masteryState ?? 'new';
   const nextSeenCount = (existing?.seenCount ?? 0) + 1;
@@ -40,6 +62,7 @@ export function applyMasterySignal(
   const nextSuccessStreak = signal.correctness ? (existing?.successStreak ?? 0) + 1 : 0;
   const nextFailureStreak = signal.correctness ? 0 : (existing?.failureStreak ?? 0) + 1;
   const nextState = resolveMasteryState({
+    settings,
     previousState,
     correctness: signal.correctness,
     successStreak: nextSuccessStreak,
@@ -69,7 +92,7 @@ export function applyMasterySignal(
     lastOutcome: signal.correctness ? 'correct' : 'wrong',
     lastTimingMs: signal.timingMs,
     averageTimingMs: calculateAverageTimingMs(existing, signal.timingMs),
-    nextReviewAt: calculateNextReviewAt(nextState, signal.occurredAt),
+    nextReviewAt: calculateNextReviewAt(nextState, signal.occurredAt, settings),
     resurfacingReason: nextReason,
     createdAt: existing?.createdAt ?? signal.occurredAt,
     updatedAt: signal.occurredAt,
@@ -81,16 +104,20 @@ export function applyMasterySignal(
   };
 }
 
-export function calculateNextReviewAt(state: MasteryState, occurredAt: string): string {
+export function calculateNextReviewAt(
+  state: MasteryState,
+  occurredAt: string,
+  settings: MasterySchedulerSettings = defaultSettings,
+): string {
   const baseTime = new Date(occurredAt).getTime();
   const intervalMs = state === 'weak'
-    ? weakReviewMs
+    ? settings.weakReviewHours * 60 * 60 * 1000
     : state === 'learning'
-      ? learningReviewMs
+      ? settings.learningReviewHours * 60 * 60 * 1000
       : state === 'stable'
-        ? stableReviewMs
+        ? settings.stableReviewDays * 24 * 60 * 60 * 1000
         : state === 'mastered'
-          ? masteredReviewMs
+          ? settings.masteredReviewDays * 24 * 60 * 60 * 1000
           : 0;
 
   return new Date(baseTime + intervalMs).toISOString();
@@ -140,7 +167,11 @@ export function calculateReviewPriority(mastery: UserMastery, now: string): numb
   return basePriority + overdueBonus + lastOutcomeBonus;
 }
 
-export function isWeakResurfacingCandidate(mastery: UserMastery, now: string): boolean {
+export function isWeakResurfacingCandidate(
+  mastery: UserMastery,
+  now: string,
+  settings: MasterySchedulerSettings = defaultSettings,
+): boolean {
   if (mastery.masteryState === 'weak' || mastery.failureStreak >= 2) {
     return true;
   }
@@ -150,7 +181,7 @@ export function isWeakResurfacingCandidate(mastery: UserMastery, now: string): b
   }
 
   const nextReviewTime = new Date(mastery.nextReviewAt).getTime();
-  const shortWindowEnd = new Date(now).getTime() + weakReviewMs;
+  const shortWindowEnd = new Date(now).getTime() + (settings.weakResurfaceWindowHours * 60 * 60 * 1000);
   return nextReviewTime <= shortWindowEnd;
 }
 
@@ -187,6 +218,7 @@ function isDue(mastery: UserMastery, now: string): boolean {
 }
 
 function resolveMasteryState(input: {
+  settings: MasterySchedulerSettings;
   previousState: MasteryState;
   correctness: boolean;
   successStreak: number;
@@ -199,11 +231,22 @@ function resolveMasteryState(input: {
       return 'learning';
     }
 
-    if (input.previousState === 'learning' && input.successStreak >= 3 && input.correctCount > input.wrongCount) {
+    const correctOverWrongSatisfied = input.settings.learningRequiresCorrectOverWrong
+      ? input.correctCount > input.wrongCount
+      : true;
+    if (
+      input.previousState === 'learning'
+      && input.successStreak >= input.settings.learningToStableSuccessStreak
+      && correctOverWrongSatisfied
+    ) {
       return 'stable';
     }
 
-    if (input.previousState === 'stable' && input.successStreak >= 6 && input.wrongCount <= 2) {
+    if (
+      input.previousState === 'stable'
+      && input.successStreak >= input.settings.stableToMasteredSuccessStreak
+      && input.wrongCount <= input.settings.masteredMaxWrongCount
+    ) {
       return 'mastered';
     }
 

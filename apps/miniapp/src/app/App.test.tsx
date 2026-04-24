@@ -108,6 +108,17 @@ describe('App bootstrap and routing', () => {
     expect(screen.getByText('down')).toBeTruthy();
   });
 
+  it('shows a cohort gate message when soft launch access is closed for the user', async () => {
+    mockFetchSequence([{ status: 403, body: { code: 'soft_launch_unavailable', message: 'closed' } }]);
+
+    renderApp('/');
+
+    expect(await screen.findByText('Не удалось открыть приложение')).toBeTruthy();
+    expect(
+      screen.getByText('Сейчас приложение доступно только для приглашённой A1/A2-группы soft launch.'),
+    ).toBeTruthy();
+  });
+
   it('shows a user-safe message when the API is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Load failed')));
 

@@ -70,8 +70,71 @@ describe('mounted auth and run routes', () => {
         adminHistory: 'GET /admin/history',
         adminAnalyticsOverview: 'GET /admin/analytics/overview',
         adminAntiCheatAnomalies: 'GET /admin/anti-cheat/anomalies',
+        adminSoftLaunch: 'GET /admin/soft-launch',
       },
     });
+  });
+
+  it('rejects non-cohort users on Telegram auth when soft launch is enabled', async () => {
+    const handler = createHandler({
+      env: {
+        SOFT_LAUNCH_ENABLED: 'true',
+        SOFT_LAUNCH_ALLOWED_TELEGRAM_USER_IDS: '777777',
+      },
+    });
+
+    const response = await authenticate(handler, '123456');
+
+    expect(response.status).toBe(403);
+    expect((response.body as { code: string }).code).toBe('soft_launch_unavailable');
+  });
+
+  it('rejects non-cohort stored sessions on player access while soft launch is enabled', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({
+      pool: poolContext,
+      env: {
+        SOFT_LAUNCH_ENABLED: 'true',
+        SOFT_LAUNCH_ALLOWED_TELEGRAM_USER_IDS: '777777',
+      },
+    });
+    await dispatchJson(handler, {
+      method: 'GET',
+      url: '/health',
+    });
+    const issuedAt = fixedNow.toISOString();
+    const expiresAt = new Date(fixedNow.getTime() + (60 * 60 * 1000)).toISOString();
+    const token = 'seeded-session-token';
+    await poolContext.pool.query(
+      `
+        INSERT INTO users (
+          id, telegram_user_id, username, first_name, last_name, language_code, is_premium, created_at, last_login_at
+        )
+        VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8)
+      `,
+      ['usr_seeded', '123456', 'seeded_user', 'Seeded', 'ru', false, issuedAt, issuedAt],
+    );
+    await poolContext.pool.query(
+      `
+        INSERT INTO sessions (
+          id, token, user_id, issued_at, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      ['sess_seeded', token, 'usr_seeded', issuedAt, expiresAt],
+    );
+
+    const response = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/auth/session',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect((response.body as { code: string }).code).toBe('soft_launch_unavailable');
   });
 
   it('returns CORS headers for requests from the configured mini app origin', async () => {
@@ -223,6 +286,50 @@ describe('mounted auth and run routes', () => {
 
     expect(persisted.status).toBe(200);
     expect((persisted.body as { run: { id: string } }).run.id).toBe(firstRun.id);
+  });
+
+  it('uses configurable starting hearts and wrong-answer heart loss from soft-launch settings', async () => {
+    const handler = createHandler({
+      env: {
+        SOFT_LAUNCH_STARTING_HEARTS: '4',
+        SOFT_LAUNCH_WRONG_ANSWER_HEART_LOSS: '2',
+      },
+    });
+    const auth = await authenticate(handler, '123456');
+    const token = getToken(auth.body);
+
+    const started = await dispatchJson(handler, {
+      method: 'POST',
+      url: '/runs/start',
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: { levelId: 'A1' },
+    });
+    expect(started.status).toBe(200);
+    expect((started.body as { run: { heartsRemaining: number } }).run.heartsRemaining).toBe(4);
+
+    const run = (started.body as { run: Awaited<ReturnType<typeof startRun>> }).run;
+    const wrongOption = run.currentQuestionState.question.options.find(
+      (option) => option.id !== run.currentQuestionState.question.correctOptionId,
+    );
+    if (!wrongOption) {
+      throw new Error('Expected a wrong option.');
+    }
+
+    const answered = await dispatchJson(handler, {
+      method: 'POST',
+      url: `/runs/${run.id}/answer`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      body: {
+        selectedOptionId: wrongOption.id,
+      },
+    });
+    expect(answered.status).toBe(200);
+    expect((answered.body as { run: { heartsRemaining: number }; evaluation: { penalty: { amount: number } } }).run.heartsRemaining).toBe(2);
+    expect((answered.body as { evaluation: { penalty: { amount: number } } }).evaluation.penalty.amount).toBe(2);
   });
 
   it('rejects cross-user run access', async () => {
@@ -671,6 +778,58 @@ describe('mounted auth and run routes', () => {
     ]);
   });
 
+  it('exposes soft-launch status and report endpoints for admins', async () => {
+    const poolContext = createTestPool();
+    pools.push(poolContext);
+    const handler = createHandler({ pool: poolContext });
+    const adminToken = getToken((await authenticate(handler, '999999')).body);
+
+    const updated = await dispatchJson(handler, {
+      method: 'PATCH',
+      url: '/admin/soft-launch',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+      body: {
+        settings: {
+          startingHearts: 4,
+          wrongAnswerHeartLoss: 1,
+          learningToStableSuccessStreak: 3,
+          stableToMasteredSuccessStreak: 6,
+          learningRequiresCorrectOverWrong: true,
+          masteredMaxWrongCount: 2,
+          weakReviewHours: 2,
+          learningReviewHours: 12,
+          stableReviewDays: 3,
+          masteredReviewDays: 10,
+          weakResurfaceWindowHours: 2,
+        },
+        note: 'Soft-launch test snapshot',
+      },
+    });
+    expect(updated.status).toBe(200);
+    expect((updated.body as { activeSettings: { settings: { startingHearts: number } } }).activeSettings.settings.startingHearts).toBe(4);
+
+    const status = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/soft-launch',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+    expect(status.status).toBe(200);
+
+    const launchReport = await dispatchJson(handler, {
+      method: 'GET',
+      url: '/admin/soft-launch/reports/launch?levelId=A1',
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+      },
+    });
+    expect(launchReport.status).toBe(200);
+    expect((launchReport.body as { markdownSummary: string }).markdownSummary).toContain('Launch report');
+  });
+
   it('finalizes a run and exposes the persisted terminal summary', async () => {
     const handler = createHandler();
     const token = getToken((await authenticate(handler, '123456')).body);
@@ -1095,6 +1254,7 @@ describe('mounted auth and run routes', () => {
 
 function createHandler(options?: {
   pool?: ReturnType<typeof createTestPool>;
+  env?: Record<string, string>;
 }) {
   const poolContext = options?.pool ?? createTestPool();
   if (!options?.pool) {
@@ -1110,6 +1270,7 @@ function createHandler(options?: {
       ADMIN_BASE_URL: 'http://localhost:3001',
       ADMIN_ALLOWED_TELEGRAM_USER_IDS: '999999',
       POSTGRES_URL: 'postgres://test/test',
+      ...(options?.env ?? {}),
     },
     now: () => fixedNow,
     seedGenerator: () => 777,

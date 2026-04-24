@@ -16,12 +16,16 @@ type CreateMasteryModuleOptions = {
   analytics?: {
     recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
   };
+  softLaunchSettings?: {
+    getActiveSettings(): Promise<import('@langue-buster/shared').SoftLaunchSettings>;
+  };
   logger?: {
     warn(message: string, context: Record<string, unknown>): void;
   };
   errorReporter?: {
     captureError(error: unknown, context: Record<string, unknown>): void;
   };
+  verifyPlayerAccess?: (authorizationHeader: string | undefined) => Promise<import('@langue-buster/shared').SessionVerificationResponse>;
 };
 
 export function createMasteryModule(options: CreateMasteryModuleOptions) {
@@ -36,12 +40,15 @@ export function createMasteryModule(options: CreateMasteryModuleOptions) {
     contentRepository: options.contentRepository,
     now: options.now,
     analytics: options.analytics,
+    softLaunchSettings: options.softLaunchSettings,
     logger: options.logger,
     errorReporter: options.errorReporter,
   });
 
   return {
-    controller: createMasteryController(service, options.sessionVerifier),
+    controller: createMasteryController(service, options.sessionVerifier, {
+      verifyPlayerAccess: options.verifyPlayerAccess,
+    }),
     service,
     repositories,
   };

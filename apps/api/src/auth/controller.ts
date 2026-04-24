@@ -69,7 +69,11 @@ export function createAuthController(
         });
 
         return {
-          status: normalizedError.code === 'invalid_signature' ? 401 : 400,
+          status: normalizedError.code === 'invalid_signature'
+            ? 401
+            : normalizedError.code === 'soft_launch_unavailable'
+              ? 403
+              : 400,
           body: normalizedError,
         };
       }

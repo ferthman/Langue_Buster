@@ -16,6 +16,9 @@ type CreateRunModuleOptions = {
   analytics?: {
     recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
   };
+  softLaunchSettings?: {
+    getActiveSettings(): Promise<import('@langue-buster/shared').SoftLaunchSettings>;
+  };
   logger?: {
     warn(message: string, context: Record<string, unknown>): void;
   };
@@ -23,6 +26,7 @@ type CreateRunModuleOptions = {
     captureError(error: unknown, context: Record<string, unknown>): void;
   };
   antiCheat?: Parameters<typeof createRunService>[0]['antiCheat'];
+  verifyPlayerAccess?: (authorizationHeader: string | undefined) => Promise<import('@langue-buster/shared').SessionVerificationResponse>;
 };
 
 export function createRunModule(options: CreateRunModuleOptions) {
@@ -40,13 +44,16 @@ export function createRunModule(options: CreateRunModuleOptions) {
     seedGenerator: options.seedGenerator,
     masteryUpdater: options.masteryUpdater,
     analytics: options.analytics,
+    softLaunchSettings: options.softLaunchSettings,
     logger: options.logger,
     errorReporter: options.errorReporter,
     antiCheat: options.antiCheat,
   });
 
   return {
-    controller: createRunController(service, options.sessionVerifier),
+    controller: createRunController(service, options.sessionVerifier, {
+      verifyPlayerAccess: options.verifyPlayerAccess,
+    }),
     service,
     repositories,
     contentRepository,

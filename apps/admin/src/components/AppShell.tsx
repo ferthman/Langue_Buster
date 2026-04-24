@@ -13,6 +13,7 @@ const navigationItems = [
   { href: '/import', label: 'Импорт' },
   { href: '/history', label: 'История' },
   { href: '/analytics', label: 'Аналитика' },
+  { href: '/soft-launch', label: 'Soft launch' },
   { href: '/anti-cheat', label: 'Anti-cheat' },
 ] as const;
 

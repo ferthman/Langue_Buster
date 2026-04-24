@@ -10,6 +10,7 @@ import type {
   ReviewAnswerEvent,
   ReviewQueueItem,
   RunResult,
+  SoftLaunchSettings,
   UserMastery,
 } from '@langue-buster/shared';
 import {
@@ -39,6 +40,9 @@ type MasteryServiceDependencies = {
   analytics?: {
     recordEvent(event: AnalyticsEventEnvelope): Promise<unknown>;
   };
+  softLaunchSettings?: {
+    getActiveSettings(): Promise<SoftLaunchSettings>;
+  };
   logger?: {
     warn(message: string, context: Record<string, unknown>): void;
   };
@@ -64,6 +68,7 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
       }
 
       const answerEvents = await dependencies.answerEventRepository.findByRunId(runId);
+      const settings = await resolveSchedulerSettings(dependencies);
       for (const event of answerEvents) {
         await applySignal(dependencies, {
           userId: runResult.userId,
@@ -72,7 +77,7 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
           correctness: event.correctness,
           occurredAt: event.occurredAt,
           timingMs: event.timingMs,
-        });
+        }, settings);
       }
 
       return dependencies.runResultRepository.markMasteryApplied(runId, now().toISOString());
@@ -170,7 +175,7 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
         correctness: evaluation.isCorrect,
         occurredAt,
         timingMs: evaluation.timingMs,
-      });
+      }, await resolveSchedulerSettings(dependencies));
       const event: ReviewAnswerEvent = reviewAnswerEventSchema.parse({
         id: `rev_${randomUUID()}`,
         userId: input.userId,
@@ -207,7 +212,12 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
       return {
         evaluation,
         mastery: applied.mastery,
-        reviewQueueItem: buildReviewQueueItem(dependencies.contentRepository, applied.mastery, input.direction, now().toISOString()),
+        reviewQueueItem: buildReviewQueueItem(
+          dependencies,
+          applied.mastery,
+          input.direction,
+          now().toISOString(),
+        ),
       };
     },
 
@@ -217,7 +227,8 @@ export function createMasteryService(dependencies: MasteryServiceDependencies) {
     }): Promise<readonly UserMastery[]> {
       const masteries = await dependencies.userMasteryRepository.listByUser(input.userId, input.levelId);
       const nowIso = now().toISOString();
-      return masteries.filter((mastery) => isWeakResurfacingCandidate(mastery, nowIso));
+      const settings = await resolveSchedulerSettings(dependencies);
+      return masteries.filter((mastery) => isWeakResurfacingCandidate(mastery, nowIso, settings));
     },
   };
 }
@@ -228,9 +239,10 @@ async function applySignal(
     'userMasteryRepository' | 'contentRepository'
   >,
   signal: MasteryUpdateSignal,
+  settings: import('./scheduler.js').MasterySchedulerSettings,
 ) {
   const existing = await dependencies.userMasteryRepository.findByUserAndItem(signal.userId, signal.sourceItemId);
-  const applied = applyMasterySignal(existing, signal);
+  const applied = applyMasterySignal(existing, signal, settings);
   const mastery = await dependencies.userMasteryRepository.save(applied.mastery);
 
   return {
@@ -240,12 +252,12 @@ async function applySignal(
 }
 
 function buildReviewQueueItem(
-  contentRepository: RunContentRepository,
+  dependencies: Pick<MasteryServiceDependencies, 'contentRepository' | 'softLaunchSettings'>,
   mastery: UserMastery,
   direction: AnswerDirection,
   nowIso: string,
 ): ReviewQueueItem {
-  const item = requireSourceItem(contentRepository, mastery.sourceItemId);
+  const item = requireSourceItem(dependencies.contentRepository, mastery.sourceItemId);
   const scheduled = scheduleReviewQueue([mastery], {
     now: nowIso,
     limit: 1,
@@ -261,11 +273,44 @@ function buildReviewQueueItem(
     priority,
     reason: mastery.resurfacingReason,
     topicId: item.topicId,
-    question: createReviewQuestion(contentRepository, mastery.sourceItemId, direction),
+    question: createReviewQuestion(dependencies.contentRepository, mastery.sourceItemId, direction),
     lastSeenAt: mastery.lastSeenAt,
     createdAt: mastery.createdAt,
     updatedAt: mastery.updatedAt,
   });
+}
+
+const defaultSchedulerSettings = {
+  learningToStableSuccessStreak: 3,
+  stableToMasteredSuccessStreak: 6,
+  learningRequiresCorrectOverWrong: true,
+  masteredMaxWrongCount: 2,
+  weakReviewHours: 2,
+  learningReviewHours: 12,
+  stableReviewDays: 3,
+  masteredReviewDays: 10,
+  weakResurfaceWindowHours: 2,
+} as const;
+
+async function resolveSchedulerSettings(
+  dependencies: Pick<MasteryServiceDependencies, 'softLaunchSettings'>,
+) {
+  if (!dependencies.softLaunchSettings) {
+    return defaultSchedulerSettings;
+  }
+
+  const settings = await dependencies.softLaunchSettings.getActiveSettings();
+  return {
+    learningToStableSuccessStreak: settings.learningToStableSuccessStreak,
+    stableToMasteredSuccessStreak: settings.stableToMasteredSuccessStreak,
+    learningRequiresCorrectOverWrong: settings.learningRequiresCorrectOverWrong,
+    masteredMaxWrongCount: settings.masteredMaxWrongCount,
+    weakReviewHours: settings.weakReviewHours,
+    learningReviewHours: settings.learningReviewHours,
+    stableReviewDays: settings.stableReviewDays,
+    masteredReviewDays: settings.masteredReviewDays,
+    weakResurfaceWindowHours: settings.weakResurfaceWindowHours,
+  };
 }
 
 function createReviewQuestion(

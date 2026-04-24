@@ -1,5 +1,6 @@
 import type {
   AnalyticsContentResponse,
+  AnalyticsAdminQuery,
   AnalyticsFunnelsResponse,
   AnalyticsOverviewResponse,
   AnalyticsRetentionResponse,
@@ -27,12 +28,20 @@ import type {
   AdminVocabUpsertRequest,
   AuthError,
   SessionVerificationResponse,
+  SoftLaunchContentIssueReport,
+  SoftLaunchLaunchReport,
+  SoftLaunchReportQuery,
+  SoftLaunchRetentionReport,
+  SoftLaunchStatus,
+  SoftLaunchTuningBacklogReport,
+  SoftLaunchUpdateRequest,
 } from '@langue-buster/shared';
 import {
   adminBulkUpdateVocabItemsRequestSchema,
   adminBulkUpdateVocabItemsResponseSchema,
   adminErrorSchema,
   analyticsContentResponseSchema,
+  analyticsAdminQuerySchema,
   analyticsFunnelsResponseSchema,
   analyticsOverviewResponseSchema,
   analyticsRetentionResponseSchema,
@@ -58,6 +67,13 @@ import {
   adminVocabUpsertRequestSchema,
   authErrorSchema,
   sessionVerificationResponseSchema,
+  softLaunchContentIssueReportSchema,
+  softLaunchLaunchReportSchema,
+  softLaunchReportQuerySchema,
+  softLaunchRetentionReportSchema,
+  softLaunchStatusSchema,
+  softLaunchTuningBacklogReportSchema,
+  softLaunchUpdateRequestSchema,
 } from '@langue-buster/shared';
 
 type SchemaLike<T> = {
@@ -334,9 +350,9 @@ export const adminApi = {
     });
   },
 
-  getAnalyticsOverview(token: string) {
+  getAnalyticsOverview(token: string, query: Partial<AnalyticsAdminQuery> = {}) {
     return request<AnalyticsOverviewResponse>({
-      path: '/admin/analytics/overview',
+      path: `/admin/analytics/overview${buildAnalyticsSearch(query)}`,
       method: 'GET',
       token,
       responseSchema: analyticsOverviewResponseSchema,
@@ -345,9 +361,9 @@ export const adminApi = {
     });
   },
 
-  getAnalyticsFunnels(token: string) {
+  getAnalyticsFunnels(token: string, query: Partial<AnalyticsAdminQuery> = {}) {
     return request<AnalyticsFunnelsResponse>({
-      path: '/admin/analytics/funnels',
+      path: `/admin/analytics/funnels${buildAnalyticsSearch(query)}`,
       method: 'GET',
       token,
       responseSchema: analyticsFunnelsResponseSchema,
@@ -356,9 +372,9 @@ export const adminApi = {
     });
   },
 
-  getAnalyticsContent(token: string) {
+  getAnalyticsContent(token: string, query: Partial<AnalyticsAdminQuery> = {}) {
     return request<AnalyticsContentResponse>({
-      path: '/admin/analytics/content',
+      path: `/admin/analytics/content${buildAnalyticsSearch(query)}`,
       method: 'GET',
       token,
       responseSchema: analyticsContentResponseSchema,
@@ -367,9 +383,9 @@ export const adminApi = {
     });
   },
 
-  getAnalyticsRetention(token: string) {
+  getAnalyticsRetention(token: string, query: Partial<AnalyticsAdminQuery> = {}) {
     return request<AnalyticsRetentionResponse>({
-      path: '/admin/analytics/retention',
+      path: `/admin/analytics/retention${buildAnalyticsSearch(query)}`,
       method: 'GET',
       token,
       responseSchema: analyticsRetentionResponseSchema,
@@ -402,6 +418,73 @@ export const adminApi = {
       responseSchema: antiCheatAnomalyListResponseSchema,
       errorSchemas: [adminErrorSchema, authErrorSchema],
       fallbackErrorMessage: 'Не удалось загрузить anti-cheat события.',
+    });
+  },
+
+  getSoftLaunchStatus(token: string) {
+    return request<SoftLaunchStatus>({
+      path: '/admin/soft-launch',
+      method: 'GET',
+      token,
+      responseSchema: softLaunchStatusSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить soft-launch статус.',
+    });
+  },
+
+  updateSoftLaunchSettings(token: string, payload: SoftLaunchUpdateRequest) {
+    return request<SoftLaunchStatus>({
+      path: '/admin/soft-launch',
+      method: 'PATCH',
+      token,
+      body: softLaunchUpdateRequestSchema.parse(payload),
+      responseSchema: softLaunchStatusSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось обновить soft-launch настройки.',
+    });
+  },
+
+  getSoftLaunchLaunchReport(token: string, query: Partial<SoftLaunchReportQuery> = {}) {
+    return request<SoftLaunchLaunchReport>({
+      path: `/admin/soft-launch/reports/launch${buildSoftLaunchSearch(query)}`,
+      method: 'GET',
+      token,
+      responseSchema: softLaunchLaunchReportSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить launch report.',
+    });
+  },
+
+  getSoftLaunchRetentionReport(token: string, query: Partial<SoftLaunchReportQuery> = {}) {
+    return request<SoftLaunchRetentionReport>({
+      path: `/admin/soft-launch/reports/retention${buildSoftLaunchSearch(query)}`,
+      method: 'GET',
+      token,
+      responseSchema: softLaunchRetentionReportSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить retention report.',
+    });
+  },
+
+  getSoftLaunchContentReport(token: string, query: Partial<SoftLaunchReportQuery> = {}) {
+    return request<SoftLaunchContentIssueReport>({
+      path: `/admin/soft-launch/reports/content${buildSoftLaunchSearch(query)}`,
+      method: 'GET',
+      token,
+      responseSchema: softLaunchContentIssueReportSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить content issue report.',
+    });
+  },
+
+  getSoftLaunchTuningReport(token: string, query: Partial<SoftLaunchReportQuery> = {}) {
+    return request<SoftLaunchTuningBacklogReport>({
+      path: `/admin/soft-launch/reports/tuning${buildSoftLaunchSearch(query)}`,
+      method: 'GET',
+      token,
+      responseSchema: softLaunchTuningBacklogReportSchema,
+      errorSchemas: [adminErrorSchema, authErrorSchema],
+      fallbackErrorMessage: 'Не удалось загрузить tuning backlog.',
     });
   },
 };
@@ -499,4 +582,36 @@ function extractEntityId(item: unknown) {
   }
 
   return '';
+}
+
+function buildAnalyticsSearch(query: Partial<AnalyticsAdminQuery>) {
+  const parsed = analyticsAdminQuerySchema.parse(query);
+  const search = new URLSearchParams();
+  if (parsed.from) {
+    search.set('from', parsed.from);
+  }
+  if (parsed.to) {
+    search.set('to', parsed.to);
+  }
+  if (parsed.levelId) {
+    search.set('levelId', parsed.levelId);
+  }
+  const serialized = search.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
+function buildSoftLaunchSearch(query: Partial<SoftLaunchReportQuery>) {
+  const parsed = softLaunchReportQuerySchema.parse(query);
+  const search = new URLSearchParams();
+  if (parsed.from) {
+    search.set('from', parsed.from);
+  }
+  if (parsed.to) {
+    search.set('to', parsed.to);
+  }
+  if (parsed.levelId) {
+    search.set('levelId', parsed.levelId);
+  }
+  const serialized = search.toString();
+  return serialized ? `?${serialized}` : '';
 }

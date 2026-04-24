@@ -4,7 +4,7 @@ import {
 } from 'node:http';
 import { URL } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { rateLimitedErrorSchema } from '@langue-buster/shared';
+import { authErrorSchema, rateLimitedErrorSchema } from '@langue-buster/shared';
 
 import { createAnalyticsModule } from './analytics/index.js';
 import { createUnavailableAnalyticsController, type AnalyticsController } from './analytics/controller.js';
@@ -24,6 +24,7 @@ import { PostgresUserMasteryRepository } from './mastery/repositories.js';
 import { createAuthModule, createPostgresAuthRepositories } from './auth/index.js';
 import { createUnavailableAuthController, type AuthController } from './auth/controller.js';
 import { AuthDomainError } from './auth/errors.js';
+import { mapSessionErrorStatus } from './auth/session-verifier.js';
 import type { DatabaseClient } from './db/client.js';
 import { createDatabaseRuntime, resolveDatabaseConnectionString } from './db/runtime.js';
 import { applyCors, readJsonBody, sendJson } from './http.js';
@@ -35,6 +36,10 @@ import { createUnavailableRunController, type RunController } from './runs/contr
 import { PostgresAnswerEventRepository, PostgresMoveEventRepository, PostgresRunResultRepository } from './runs/repositories.js';
 import { createContentAdminModule } from './content-admin/index.js';
 import { createUnavailableContentAdminController, type ContentAdminController } from './content-admin/controller.js';
+import { createSoftLaunchModule } from './soft-launch/index.js';
+import { createUnavailableSoftLaunchController, type SoftLaunchController } from './soft-launch/controller.js';
+import { createSoftLaunchAccessPolicy, type SoftLaunchService } from './soft-launch/service.js';
+import { normalizeAuthError } from './auth/service.js';
 
 type CreateApiServerOptions = {
   env: Record<string, string | undefined>;
@@ -75,9 +80,11 @@ export function createApiRequestHandler(options: CreateApiServerOptions) {
       contentAdminController: modules.contentAdminController,
       analyticsController: modules.analyticsController,
       antiCheatController: modules.antiCheatController,
+      softLaunchController: modules.softLaunchController,
       authConfigured,
       rateLimiter: modules.rateLimiter,
       antiCheatService: modules.antiCheatService,
+      softLaunchService: modules.softLaunchService,
       allowedOrigins: [options.env.MINIAPP_BASE_URL, options.env.ADMIN_BASE_URL]
         .map((origin) => origin?.trim())
         .filter((origin): origin is string => Boolean(origin)),
@@ -126,8 +133,10 @@ function createApiModules(
   contentAdminController: ContentAdminController;
   analyticsController: AnalyticsController;
   antiCheatController: AntiCheatController;
+  softLaunchController: SoftLaunchController;
   rateLimiter: RateLimiter;
   antiCheatService?: AntiCheatService;
+  softLaunchService?: SoftLaunchService;
   logger: ReturnType<typeof createAnalyticsModule>['logger'];
   errorReporter: ReturnType<typeof createAnalyticsModule>['errorReporter'];
 } {
@@ -142,6 +151,7 @@ function createApiModules(
         return analyticsRepository.save(event);
       },
     };
+    const softLaunchAccess = createSoftLaunchAccessPolicy(options.env);
     const authRepositories = createPostgresAuthRepositories(client, {
       now: options.now,
     });
@@ -153,6 +163,7 @@ function createApiModules(
       sessionTtlSeconds: options.sessionTtlSeconds,
       maxAuthAgeSeconds: options.maxAuthAgeSeconds,
       analytics: analyticsTracker,
+      softLaunchAccess,
       logger,
       errorReporter,
     });
@@ -172,6 +183,15 @@ function createApiModules(
       errorReporter,
     });
     const contentRepository = createRunContentRepository();
+    const softLaunchModule = createSoftLaunchModule({
+      client,
+      sessionVerifier: authModule.sessionVerifier,
+      env: options.env,
+      analyticsRepository,
+      antiCheatAnomalyRepository: antiCheatModule.anomalyRepository,
+      userMasteryRepository: new PostgresUserMasteryRepository(client),
+      now: options.now,
+    });
     const masteryModule = createMasteryModule({
       client,
       sessionVerifier: authModule.sessionVerifier,
@@ -180,8 +200,10 @@ function createApiModules(
       contentRepository,
       now: options.now,
       analytics: analyticsTracker,
+      softLaunchSettings: softLaunchModule.service,
       logger,
       errorReporter,
+      verifyPlayerAccess: (authorizationHeader) => softLaunchModule.service.verifyPlayerAccess(authorizationHeader),
     });
     const runModule = createRunModule({
       client,
@@ -190,9 +212,11 @@ function createApiModules(
       seedGenerator: options.seedGenerator,
       masteryUpdater: masteryModule.service,
       analytics: analyticsTracker,
+      softLaunchSettings: softLaunchModule.service,
       logger,
       errorReporter,
       antiCheat: antiCheatModule.service,
+      verifyPlayerAccess: (authorizationHeader) => softLaunchModule.service.verifyPlayerAccess(authorizationHeader),
     });
     const contentAdminModule = createContentAdminModule({
       client,
@@ -219,8 +243,10 @@ function createApiModules(
       contentAdminController: contentAdminModule.controller,
       analyticsController: analyticsModule.controller,
       antiCheatController: antiCheatModule.controller,
+      softLaunchController: softLaunchModule.controller,
       rateLimiter: antiCheatModule.rateLimiter,
       antiCheatService: antiCheatModule.service,
+      softLaunchService: softLaunchModule.service,
       logger,
       errorReporter,
     };
@@ -237,6 +263,7 @@ function createApiModules(
       contentAdminController: createUnavailableContentAdminController(message),
       analyticsController: createUnavailableAnalyticsController(message),
       antiCheatController: createUnavailableAntiCheatController(message),
+      softLaunchController: createUnavailableSoftLaunchController(message),
       rateLimiter: createFixedWindowRateLimiter({ now: options.now }),
       logger,
       errorReporter,
@@ -254,9 +281,11 @@ async function routeRequest(
     contentAdminController: ContentAdminController;
     analyticsController: AnalyticsController;
     antiCheatController: AntiCheatController;
+    softLaunchController: SoftLaunchController;
     authConfigured: boolean;
     rateLimiter: RateLimiter;
     antiCheatService?: AntiCheatService;
+    softLaunchService?: SoftLaunchService;
     allowedOrigins: readonly string[];
     requestId: string;
   },
@@ -332,6 +361,7 @@ async function routeRequest(
         adminHistory: 'GET /admin/history',
         adminAnalyticsOverview: 'GET /admin/analytics/overview',
         adminAntiCheatAnomalies: 'GET /admin/anti-cheat/anomalies',
+        adminSoftLaunch: 'GET /admin/soft-launch',
       },
     });
     return;
@@ -345,6 +375,15 @@ async function routeRequest(
   }
 
   if (method === 'GET' && url.pathname === '/auth/session') {
+    if (options.softLaunchService) {
+      try {
+        await options.softLaunchService.verifyPlayerAccess(authorizationHeader);
+      } catch (error) {
+        const normalizedError = normalizeAuthError(error);
+        sendJson(response, mapSessionErrorStatus(authErrorSchema.parse(normalizedError)), normalizedError);
+        return;
+      }
+    }
     const result = await options.authController.handleSessionLookup(authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
@@ -374,6 +413,15 @@ async function routeRequest(
   }
 
   if (method === 'POST' && url.pathname === '/analytics/events') {
+    if (options.softLaunchService) {
+      try {
+        await options.softLaunchService.verifyPlayerAccess(authorizationHeader);
+      } catch (error) {
+        const normalizedError = normalizeAuthError(error);
+        sendJson(response, mapSessionErrorStatus(authErrorSchema.parse(normalizedError)), normalizedError);
+        return;
+      }
+    }
     const body = await readJsonBody(request);
     const result = await options.analyticsController.handleIngest(body, authorizationHeader);
     sendJson(response, result.status, result.body);
@@ -381,25 +429,62 @@ async function routeRequest(
   }
 
   if (method === 'GET' && url.pathname === '/admin/analytics/overview') {
-    const result = await options.analyticsController.handleOverview(authorizationHeader);
+    const result = await options.analyticsController.handleOverview(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }
 
   if (method === 'GET' && url.pathname === '/admin/analytics/funnels') {
-    const result = await options.analyticsController.handleFunnels(authorizationHeader);
+    const result = await options.analyticsController.handleFunnels(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }
 
   if (method === 'GET' && url.pathname === '/admin/analytics/content') {
-    const result = await options.analyticsController.handleContent(authorizationHeader);
+    const result = await options.analyticsController.handleContent(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }
 
   if (method === 'GET' && url.pathname === '/admin/analytics/retention') {
-    const result = await options.analyticsController.handleRetention(authorizationHeader);
+    const result = await options.analyticsController.handleRetention(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/soft-launch') {
+    const result = await options.softLaunchController.handleStatus(authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'PATCH' && url.pathname === '/admin/soft-launch') {
+    const body = await readJsonBody(request);
+    const result = await options.softLaunchController.handleUpdate(body, authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/soft-launch/reports/launch') {
+    const result = await options.softLaunchController.handleLaunchReport(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/soft-launch/reports/retention') {
+    const result = await options.softLaunchController.handleRetentionReport(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/soft-launch/reports/content') {
+    const result = await options.softLaunchController.handleContentReport(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
+    sendJson(response, result.status, result.body);
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/admin/soft-launch/reports/tuning') {
+    const result = await options.softLaunchController.handleTuningReport(Object.fromEntries(url.searchParams.entries()), authorizationHeader);
     sendJson(response, result.status, result.body);
     return;
   }

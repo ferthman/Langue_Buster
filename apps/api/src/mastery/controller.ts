@@ -25,11 +25,20 @@ export type MasteryHttpResult = {
 
 export type MasteryController = ReturnType<typeof createMasteryController>;
 
-export function createMasteryController(masteryService: MasteryService, sessionVerifier: SessionVerifier) {
+export function createMasteryController(
+  masteryService: MasteryService,
+  sessionVerifier: SessionVerifier,
+  options: {
+    verifyPlayerAccess?(authorizationHeader: string | undefined): Promise<import('@langue-buster/shared').SessionVerificationResponse>;
+  } = {},
+) {
+  const verifyPlayerAccess = options.verifyPlayerAccess
+    ? (authorizationHeader: string | undefined) => options.verifyPlayerAccess?.(authorizationHeader)
+    : undefined;
   return {
     async handleGetQueue(query: unknown, authorizationHeader: string | undefined): Promise<MasteryHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const payload: ReviewQueueQuery = reviewQueueQuerySchema.parse(query);
         const items = await masteryService.getReviewQueue({
           userId: session.user.id,
@@ -51,7 +60,7 @@ export function createMasteryController(masteryService: MasteryService, sessionV
 
     async handleAnswer(body: unknown, authorizationHeader: string | undefined): Promise<MasteryHttpResult> {
       try {
-        const session = await verifySession(authorizationHeader, sessionVerifier);
+        const session = await verifySession(authorizationHeader, sessionVerifier, verifyPlayerAccess);
         const payload: ReviewAnswerRequest = reviewAnswerRequestSchema.parse(body);
         const response = await masteryService.submitReviewAnswer({
           userId: session.user.id,
@@ -95,7 +104,14 @@ export function createUnavailableMasteryController(message: string) {
   };
 }
 
-async function verifySession(authorizationHeader: string | undefined, sessionVerifier: SessionVerifier) {
+async function verifySession(
+  authorizationHeader: string | undefined,
+  sessionVerifier: SessionVerifier,
+  verifyPlayerAccess?: (authorizationHeader: string | undefined) => Promise<import('@langue-buster/shared').SessionVerificationResponse>,
+) {
+  if (verifyPlayerAccess) {
+    return verifyPlayerAccess(authorizationHeader);
+  }
   const token = getBearerToken(authorizationHeader);
   return sessionVerifier.verifySessionToken(token);
 }
@@ -113,11 +129,13 @@ function toErrorResult(error: unknown): MasteryHttpResult {
 
   const normalizedAuthError = normalizeAuthError(error);
   return {
-    status: normalizedAuthError.code === 'invalid_session' || normalizedAuthError.code === 'missing_session'
-      ? 401
-      : 400,
+    status: normalizedAuthError.code === 'soft_launch_unavailable'
+      ? 403
+      : normalizedAuthError.code === 'invalid_session' || normalizedAuthError.code === 'missing_session'
+        ? 401
+        : 400,
     body: {
-      code: 'review_unavailable',
+      code: normalizedAuthError.code === 'soft_launch_unavailable' ? 'soft_launch_unavailable' : 'review_unavailable',
       message: normalizedAuthError.message,
     },
   };

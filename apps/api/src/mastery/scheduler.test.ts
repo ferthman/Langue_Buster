@@ -176,6 +176,38 @@ describe('mastery scheduler and state machine', () => {
       ),
     ).toBe(false);
   });
+
+  it('honors configurable mastery thresholds and review intervals', () => {
+    const customSettings = {
+      learningToStableSuccessStreak: 2,
+      stableToMasteredSuccessStreak: 4,
+      learningRequiresCorrectOverWrong: false,
+      masteredMaxWrongCount: 3,
+      weakReviewHours: 1,
+      learningReviewHours: 6,
+      stableReviewDays: 2,
+      masteredReviewDays: 8,
+      weakResurfaceWindowHours: 1,
+    } as const;
+
+    let mastery = applyMasterySignal(null, {
+      userId: 'usr_1',
+      sourceItemId: 'vocab.a1.apple',
+      cefrLevel: 'A1',
+      correctness: true,
+      occurredAt: baseTime,
+    }, customSettings).mastery;
+
+    mastery = applyMasterySignal(mastery, {
+      userId: 'usr_1',
+      sourceItemId: 'vocab.a1.apple',
+      cefrLevel: 'A1',
+      correctness: true,
+      occurredAt: '2026-04-22T06:00:00.000Z',
+    }, customSettings).mastery;
+    expect(mastery.masteryState).toBe('stable');
+    expect(mastery.nextReviewAt).toBe('2026-04-24T06:00:00.000Z');
+  });
 });
 
 function createMastery(input: {

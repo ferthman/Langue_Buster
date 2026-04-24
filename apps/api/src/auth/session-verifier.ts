@@ -60,5 +60,11 @@ export function getBearerToken(authorizationHeader: string | undefined): string 
 }
 
 export function mapSessionErrorStatus(error: AuthError): number {
-  return error.code === 'missing_session' || error.code === 'invalid_session' ? 401 : 400;
+  if (error.code === 'missing_session' || error.code === 'invalid_session') {
+    return 401;
+  }
+  if (error.code === 'soft_launch_unavailable') {
+    return 403;
+  }
+  return 400;
 }

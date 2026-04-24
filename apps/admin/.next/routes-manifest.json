@@ -64,6 +64,12 @@
       "namedRegex": "^/analytics(?:/)?$"
     },
     {
+      "page": "/anti-cheat",
+      "regex": "^/anti\\-cheat(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/anti\\-cheat(?:/)?$"
+    },
+    {
       "page": "/history",
       "regex": "^/history(?:/)?$",
       "routeKeys": {},
@@ -80,6 +86,12 @@
       "regex": "^/lessons(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/lessons(?:/)?$"
+    },
+    {
+      "page": "/soft-launch",
+      "regex": "^/soft\\-launch(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/soft\\-launch(?:/)?$"
     },
     {
       "page": "/topics",

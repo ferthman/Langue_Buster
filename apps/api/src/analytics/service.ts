@@ -2,8 +2,10 @@ import {
   analyticsContentResponseSchema,
   analyticsFunnelsResponseSchema,
   analyticsIngestRequestSchema,
+  analyticsAdminQuerySchema,
   analyticsOverviewResponseSchema,
   analyticsRetentionResponseSchema,
+  type AnalyticsAdminQuery,
   type AnalyticsContentResponse,
   type AnalyticsEventEnvelope,
   type AnalyticsFunnelsResponse,
@@ -80,8 +82,8 @@ export function createAnalyticsService(dependencies: AnalyticsServiceDependencie
       return adminGuard.verify(authorizationHeader);
     },
 
-    async getOverview(): Promise<AnalyticsOverviewResponse> {
-      const events = await dependencies.repository.listAll();
+    async getOverview(query: unknown = {}): Promise<AnalyticsOverviewResponse> {
+      const events = filterEvents(await dependencies.repository.listAll(), analyticsAdminQuerySchema.parse(query));
       const onboardingStartedUsers = uniqueUsers(events, 'onboarding_started');
       const onboardingCompletedUsers = uniqueUsers(events, 'onboarding_completed');
       const firstRunStartUsers = uniqueUsers(events, 'run_started');
@@ -113,8 +115,8 @@ export function createAnalyticsService(dependencies: AnalyticsServiceDependencie
       });
     },
 
-    async getFunnels(): Promise<AnalyticsFunnelsResponse> {
-      const events = await dependencies.repository.listAll();
+    async getFunnels(query: unknown = {}): Promise<AnalyticsFunnelsResponse> {
+      const events = filterEvents(await dependencies.repository.listAll(), analyticsAdminQuerySchema.parse(query));
       const response = {
         steps: [
           { step: 'app_bootstrap', users: uniqueUsers(events, 'app_bootstrap_succeeded').size },
@@ -127,9 +129,10 @@ export function createAnalyticsService(dependencies: AnalyticsServiceDependencie
       return analyticsFunnelsResponseSchema.parse(response);
     },
 
-    async getContent(): Promise<AnalyticsContentResponse> {
-      const events = await dependencies.repository.listAll();
-      const masteries = await dependencies.userMasteryRepository.listAll();
+    async getContent(query: unknown = {}): Promise<AnalyticsContentResponse> {
+      const parsedQuery = analyticsAdminQuerySchema.parse(query);
+      const events = filterEvents(await dependencies.repository.listAll(), parsedQuery);
+      const masteries = filterMasteries(await dependencies.userMasteryRepository.listAll(), parsedQuery);
       const byItem = new Map<string, {
         wrongAnswerCount: number;
         reviewWrongCount: number;
@@ -239,8 +242,8 @@ export function createAnalyticsService(dependencies: AnalyticsServiceDependencie
       });
     },
 
-    async getRetention(): Promise<AnalyticsRetentionResponse> {
-      const events = await dependencies.repository.listAll();
+    async getRetention(query: unknown = {}): Promise<AnalyticsRetentionResponse> {
+      const events = filterEvents(await dependencies.repository.listAll(), analyticsAdminQuerySchema.parse(query));
       const byUser = new Map<string, readonly StoredAnalyticsEvent[]>();
       for (const event of events) {
         if (!event.userId || !activityEventNames.has(event.eventName)) {
@@ -273,6 +276,36 @@ export function createAnalyticsService(dependencies: AnalyticsServiceDependencie
       });
     },
   };
+}
+
+function filterEvents(events: readonly StoredAnalyticsEvent[], query: AnalyticsAdminQuery) {
+  return events.filter((event) => {
+    if (query.levelId && event.levelId !== query.levelId) {
+      return false;
+    }
+    if (query.from && event.occurredAt < query.from) {
+      return false;
+    }
+    if (query.to && event.occurredAt > query.to) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function filterMasteries(masteries: readonly import('@langue-buster/shared').UserMastery[], query: AnalyticsAdminQuery) {
+  return masteries.filter((mastery) => {
+    if (query.levelId && mastery.cefrLevel !== query.levelId) {
+      return false;
+    }
+    if (query.from && mastery.updatedAt < query.from) {
+      return false;
+    }
+    if (query.to && mastery.updatedAt > query.to) {
+      return false;
+    }
+    return true;
+  });
 }
 
 async function saveClientEvents(

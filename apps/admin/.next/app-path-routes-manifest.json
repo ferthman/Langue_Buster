@@ -1,13 +1,15 @@
 {
   "/_not-found/page": "/_not-found",
-  "/history/page": "/history",
   "/analytics/page": "/analytics",
-  "/import/page": "/import",
-  "/lessons/[id]/page": "/lessons/[id]",
-  "/page": "/",
+  "/anti-cheat/page": "/anti-cheat",
+  "/history/page": "/history",
   "/lessons/page": "/lessons",
+  "/import/page": "/import",
+  "/page": "/",
   "/topics/[id]/page": "/topics/[id]",
-  "/topics/page": "/topics",
+  "/lessons/[id]/page": "/lessons/[id]",
+  "/soft-launch/page": "/soft-launch",
+  "/vocab-items/page": "/vocab-items",
   "/vocab-items/[id]/page": "/vocab-items/[id]",
-  "/vocab-items/page": "/vocab-items"
+  "/topics/page": "/topics"
 }

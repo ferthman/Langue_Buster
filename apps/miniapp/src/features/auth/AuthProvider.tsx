@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { apiClient, ApiClientError } from '../api/client';
 import { createClientErrorReporter, trackAnalyticsEvent } from '../analytics/client';
+import { describeError } from '../api/errors';
 import { clearStoredSessionToken, getStoredSessionToken, setStoredSessionToken } from './storage';
 import { useTelegram } from '../telegram/TelegramProvider';
 
@@ -98,13 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         domain: 'auth-bootstrap',
         method: 'telegram_auth',
       });
-      setState({
-        status: 'error',
-        retry: () => { void bootstrap(); },
-        message:
-          error instanceof Error ? error.message : 'Не удалось авторизоваться через Telegram.',
-      });
-    }
+        setState({
+          status: 'error',
+          retry: () => { void bootstrap(); },
+          message: describeError(error, 'Не удалось авторизоваться через Telegram.'),
+        });
+      }
   }, [errorReporter, telegram.initData, telegram.isTelegram]);
   const [state, setState] = useState<AuthState>({
     status: 'bootstrapping',

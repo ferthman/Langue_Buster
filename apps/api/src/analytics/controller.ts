@@ -1,6 +1,7 @@
 import type {
   AnalyticsError,
   AnalyticsIngestResponse,
+  AnalyticsAdminQuery,
   AnalyticsContentResponse,
   AnalyticsFunnelsResponse,
   AnalyticsOverviewResponse,
@@ -12,6 +13,7 @@ import { getBearerToken, mapSessionErrorStatus } from '../auth/session-verifier.
 import { ContentAdminDomainError } from '../content-admin/errors.js';
 
 import type { AnalyticsService } from './service.js';
+import { analyticsAdminQuerySchema } from '@langue-buster/shared';
 
 export type AnalyticsHttpResult = {
   status: number;
@@ -41,20 +43,20 @@ export function createAnalyticsController(service: AnalyticsService) {
       }
     },
 
-    async handleOverview(authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
-      return handleAdminRequest(service, authorizationHeader, () => service.getOverview());
+    async handleOverview(query: unknown, authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
+      return handleAdminRequest(service, authorizationHeader, () => service.getOverview(parseAdminQuery(query)));
     },
 
-    async handleFunnels(authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
-      return handleAdminRequest(service, authorizationHeader, () => service.getFunnels());
+    async handleFunnels(query: unknown, authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
+      return handleAdminRequest(service, authorizationHeader, () => service.getFunnels(parseAdminQuery(query)));
     },
 
-    async handleContent(authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
-      return handleAdminRequest(service, authorizationHeader, () => service.getContent());
+    async handleContent(query: unknown, authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
+      return handleAdminRequest(service, authorizationHeader, () => service.getContent(parseAdminQuery(query)));
     },
 
-    async handleRetention(authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
-      return handleAdminRequest(service, authorizationHeader, () => service.getRetention());
+    async handleRetention(query: unknown, authorizationHeader: string | undefined): Promise<AnalyticsHttpResult> {
+      return handleAdminRequest(service, authorizationHeader, () => service.getRetention(parseAdminQuery(query)));
     },
   };
 }
@@ -93,7 +95,7 @@ function toAnalyticsError(error: unknown): AnalyticsHttpResult {
         message: error.message,
       }),
       body: analyticsErrorSchema.parse({
-        code: 'analytics_forbidden',
+        code: error.code === 'soft_launch_unavailable' ? 'soft_launch_unavailable' : 'analytics_forbidden',
         message: error.message,
       }),
     };
@@ -141,4 +143,8 @@ export function createUnavailableAnalyticsController(message: string) {
       return Promise.resolve({ status: 503, body });
     },
   };
+}
+
+function parseAdminQuery(query: unknown): AnalyticsAdminQuery {
+  return analyticsAdminQuerySchema.parse(query ?? {});
 }

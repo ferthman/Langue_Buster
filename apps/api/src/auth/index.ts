@@ -22,6 +22,9 @@ type CreateAuthModuleOptions = {
   analytics?: {
     recordEvent(event: import('@langue-buster/shared').AnalyticsEventEnvelope): Promise<unknown>;
   };
+  softLaunchAccess?: {
+    assertUserAccess(userId: string, telegramUserId: string): void;
+  };
   logger?: {
     warn(message: string, context: Record<string, unknown>): void;
   };
@@ -42,6 +45,7 @@ export function createAuthModule(options: CreateAuthModuleOptions) {
     sessionTtlSeconds: options.sessionTtlSeconds,
     maxAuthAgeSeconds: options.maxAuthAgeSeconds,
     analytics: options.analytics,
+    softLaunchAccess: options.softLaunchAccess,
   });
   const sessionVerifier = createSessionVerifier({
     userRepository,
