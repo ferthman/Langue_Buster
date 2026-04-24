@@ -22,12 +22,13 @@ The goal is to ship a polished Telegram Mini App that starts narrow, proves rete
 
 ## Frontend Foundation
 
-The current Mini App frontend may incorporate ideas from prototype exports, but only selectively:
-- reuse layout and interaction ideas, not prototype architecture;
+The current Mini App frontend uses the Figma-exported prototype as the baseline for the run experience:
+- port the prototype composition and direct-manipulation feel into `apps/miniapp`;
 - keep gameplay and learning logic in domain packages, not React components;
-- reject clone-like puzzle assets, branding, and glossy board art;
+- replace risky clone-like puzzle assets with safer internal gradients, shapes, and effects;
 - keep Russian as the default product UI language;
-- prefer the canonical run order: header, question card, board, tray.
+- keep the canonical run order: header, question card, board, tray;
+- keep primary interaction as true drag-and-drop / touch-and-drop from tray to board.
 
 The current integrated foundation uses a deterministic short-cycle recovery queue for wrong answers and a shared classic-run config instead of UI hardcodes.
 
@@ -66,10 +67,10 @@ This creates a loop where puzzle progress depends on language recall.
 1. Player opens the Mini App inside Telegram.
 2. Player chooses a level or enters through the current progression flow.
 3. Run starts with an 8x8 board and 3 available blocks.
-4. Player selects a block.
-5. A question card appears with a prompt and 4 answer options.
-6. If the answer is correct, the move unlocks.
-7. The player places the block on the board.
+4. A question card appears with a prompt and 4 answer options while the board stays visible.
+5. If the answer is correct, the move unlocks.
+6. The player drags one of the tray pieces directly onto the board.
+7. The board shows a live placement preview and resolves the drop immediately on release.
 8. Board resolves line clears, combo logic, score, and progression feedback.
 9. If the answer is wrong, the player loses a heart and the item goes into short-cycle recovery.
 10. When all 3 blocks are used, a new set of 3 blocks is generated.

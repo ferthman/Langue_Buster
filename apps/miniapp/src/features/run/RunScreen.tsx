@@ -16,7 +16,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
 import { useTelegram } from '../telegram/TelegramProvider';
 import { FullscreenState } from '../shell/StateScreens';
-import { BoardView, FeedbackCard, MoveSummary, QuestionCard, RunHeader, TrayView } from './components';
+import { FeedbackCard, MoveSummary, QuestionCard, RunHeader, RunPlayfield } from './components';
 
 export function RunScreen() {
   const { runId = '' } = useParams();
@@ -29,13 +29,11 @@ export function RunScreen() {
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error' | 'info'; title: string; description: string } | null>(null);
   const [moveEvent, setMoveEvent] = useState<MoveEvent | null>(null);
   const [pending, setPending] = useState(true);
-  const [selectedTrayIndex, setSelectedTrayIndex] = useState<number | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const token = auth.status === 'authenticated' ? auth.token : null;
   const locationState = location.state as { result?: RunResult } | null;
 
-  const selectedPiece = selectedTrayIndex === null ? null : run?.engineState.tray[selectedTrayIndex] ?? null;
   const question = run?.currentQuestionState?.question ?? null;
 
   const loadRun = useCallback(async () => {
@@ -59,7 +57,6 @@ export function RunScreen() {
 
       setRun(response.run);
       setSelectedOptionId(response.run.currentQuestionState?.selectedOptionId);
-      setSelectedTrayIndex(null);
     } catch (loadError) {
       setError(describeError(loadError));
       if (auth.status === 'authenticated') {
@@ -131,7 +128,7 @@ export function RunScreen() {
         setFeedback({
           tone: 'success',
           title: 'Верно',
-          description: 'Ход открыт. Выберите фигуру в трее, затем поставьте её в одну из подсвеченных клеток.',
+          description: 'Ход открыт. Перетащите любую фигуру прямо на поле: превью покажет валидную постановку до отпускания.',
         });
       } else {
         telegram.notify('error');
@@ -176,8 +173,8 @@ export function RunScreen() {
     }
   }
 
-  async function handleMove(origin: Coordinate) {
-    if (!run || selectedTrayIndex === null || !token) {
+  async function handleMove(trayIndex: number, origin: Coordinate) {
+    if (!run || !token) {
       return;
     }
 
@@ -186,18 +183,17 @@ export function RunScreen() {
 
     try {
       const response = await apiClient.moveRun(token, run.id, {
-        trayIndex: selectedTrayIndex,
+        trayIndex,
         origin,
       });
       telegram.notify('success');
       setRun(response.run);
       setMoveEvent(response.moveEvent);
-      setSelectedTrayIndex(null);
       setSelectedOptionId(undefined);
       setFeedback({
         tone: 'success',
         title: 'Ход принят',
-        description: `+${response.moveEvent.scoreBreakdown.totalPoints} очков и ${response.moveEvent.clearedLineCount} очищенных линий.`,
+        description: `Фигура встала сразу после drop. +${response.moveEvent.scoreBreakdown.totalPoints} очков и ${response.moveEvent.clearedLineCount} очищенных линий.`,
       });
 
       if (response.result) {
@@ -304,7 +300,7 @@ export function RunScreen() {
   }
 
   const answerLocked = run.status !== 'active' || run.currentQuestionState?.answerState !== 'awaiting_answer';
-  const moveUnlocked = run.status === 'awaiting_move' && Boolean(selectedPiece);
+  const moveUnlocked = run.status === 'awaiting_move';
 
   return (
     <main className="screen run-screen">
@@ -329,20 +325,24 @@ export function RunScreen() {
         onSelect={(option) => void handleAnswer(option)}
       />
 
-      <BoardView
+      <RunPlayfield
         engineState={run.engineState}
-        selectedPieceId={moveUnlocked && selectedPiece ? selectedPiece.pieceId : undefined}
-        onSelectOrigin={(origin) => void handleMove(origin)}
-      />
+        moveUnlocked={moveUnlocked && !pending}
+        onInteract={(effect) => {
+          if (effect === 'lift') {
+            telegram.impact('light');
+            return;
+          }
 
-      <TrayView
-        tray={run.engineState.tray}
-        selectedIndex={selectedTrayIndex}
-        selectable={run.status === 'awaiting_move' && !pending}
-        onSelect={(index) => {
+          if (effect === 'valid') {
+            telegram.impact('medium');
+            return;
+          }
+
           telegram.impact('light');
-          setSelectedTrayIndex(index === selectedTrayIndex ? null : index);
         }}
+        pending={pending}
+        onPlace={(trayIndex, origin) => void handleMove(trayIndex, origin)}
       />
 
       {moveEvent ? <MoveSummary moveEvent={moveEvent} /> : null}
