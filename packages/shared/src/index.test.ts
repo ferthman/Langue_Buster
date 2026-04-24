@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CLASSIC_RUN_DEFAULT_HEARTS,
+  CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP,
   analyticsEventEnvelopeSchema,
   analyticsAdminQuerySchema,
   analyticsOverviewResponseSchema,
@@ -9,6 +11,7 @@ import {
   launchLevels,
   rateLimitedErrorSchema,
   reviewQueueItemSchema,
+  runRecoveryStateSchema,
   runResultSchema,
   runSessionSchema,
   runStartRequestSchema,
@@ -21,6 +24,8 @@ import {
 describe('shared domain contracts', () => {
   it('keeps MVP launch levels constrained to A1 and A2', () => {
     expect(launchLevels).toEqual(['A1', 'A2']);
+    expect(CLASSIC_RUN_DEFAULT_HEARTS).toBe(5);
+    expect(CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP).toBe(5);
   });
 
   it('validates a run start request for launch levels only', () => {
@@ -61,6 +66,11 @@ describe('shared domain contracts', () => {
           lastClearCount: 0,
           clearedLinesTotal: 0,
         },
+        recoveryState: {
+          pending: [{ sourceItemId: 'vocab.apple', availableAfterSequence: 6, failureCount: 1 }],
+          recentSourceItemIds: ['vocab.bread'],
+          resurfacingGap: 5,
+        },
         currentQuestionState: {
           sequence: 0,
           shownAt: '2026-04-22T00:00:00.000Z',
@@ -91,6 +101,16 @@ describe('shared domain contracts', () => {
         wrongCount: 0,
         moveCount: 0,
         startedAt: '2026-04-22T00:00:00.000Z',
+      }),
+    ).not.toThrow();
+  });
+
+  it('validates short-cycle recovery payloads', () => {
+    expect(() =>
+      runRecoveryStateSchema.parse({
+        pending: [{ sourceItemId: 'vocab.apple', availableAfterSequence: 6, failureCount: 2 }],
+        recentSourceItemIds: ['vocab.bread', 'vocab.water'],
+        resurfacingGap: 5,
       }),
     ).not.toThrow();
   });

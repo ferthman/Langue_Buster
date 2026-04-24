@@ -1,21 +1,59 @@
 import { createPieceCatalog, listLegalPlacements, type Coordinate } from '@langue-buster/game-engine';
 import type { EngineState, GeneratedQuestion, MoveEvent, PieceId, QuestionOption } from '@langue-buster/shared';
+import {
+  CLASSIC_RUN_BOARD_SIZE,
+  CLASSIC_RUN_DEFAULT_HEARTS,
+  CLASSIC_RUN_TRAY_SIZE,
+} from '@langue-buster/shared';
 
 const pieceCatalog = new Map(createPieceCatalog().map((piece) => [piece.id, piece]));
+const optionLabels = ['A', 'B', 'C', 'D'] as const;
 
 export function RunHeader(props: {
   score: number;
   hearts: number;
   combo: number;
   level: string;
+  turn: number;
+  pending: boolean;
+  onFinish(): void;
 }) {
   return (
-    <header className="run-header">
-      <MetricBlock label="Уровень" value={props.level} />
-      <MetricBlock label="Счёт" value={String(props.score)} />
-      <MetricBlock label="Сердца" value={String(props.hearts)} />
-      <MetricBlock label="Комбо" value={String(props.combo)} />
-    </header>
+    <section className="hero-card run-hero">
+      <div className="run-hero__top">
+        <div>
+          <p className="eyebrow">Classic Run</p>
+          <h1>Ход {props.turn}</h1>
+          <p className="body-copy">Уровень {props.level}. Ответ открывает фигуру, затем поле принимает только валидный ход.</p>
+        </div>
+        <button
+          type="button"
+          className="secondary-button run-hero__action"
+          onClick={props.onFinish}
+          disabled={props.pending}
+        >
+          Завершить ран
+        </button>
+      </div>
+
+      <div className="run-header">
+        <MetricBlock label="Счёт" value={String(props.score)} />
+        <MetricBlock label="Комбо" value={String(props.combo)} />
+        <MetricBlock label="Поле" value={`${CLASSIC_RUN_BOARD_SIZE}x${CLASSIC_RUN_BOARD_SIZE}`} />
+        <div className="metric-card metric-card--hearts">
+          <span className="metric-label">Сердца</span>
+          <div className="heart-meter" aria-label={`Сердца ${props.hearts} из ${CLASSIC_RUN_DEFAULT_HEARTS}`}>
+            {Array.from({ length: CLASSIC_RUN_DEFAULT_HEARTS }, (_, index) => (
+              <span
+                key={`heart-${index + 1}`}
+                className={index < props.hearts ? 'heart-meter__pip is-active' : 'heart-meter__pip'}
+              />
+            ))}
+          </div>
+          <strong>{props.hearts}/{CLASSIC_RUN_DEFAULT_HEARTS}</strong>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -28,11 +66,16 @@ export function QuestionCard(props: {
 }) {
   return (
     <section className="question-card">
-      <p className="eyebrow">{props.question.cardType}</p>
-      <h1>{props.question.promptText}</h1>
-      <p className="body-copy">Тема: {props.question.meta.topicId}</p>
+      <div className="question-card__meta">
+        <p className="eyebrow">{translateCardType(props.question.cardType)}</p>
+        <span className="question-card__direction">
+          {translateDirection(props.question.promptLanguage, props.question.answerLanguage)}
+        </span>
+      </div>
+      <h1 className="question-card__prompt">{props.question.promptText}</h1>
+      <p className="body-copy">Тема: {props.question.meta.topicId}. Нужен ровно один правильный вариант.</p>
       <div className="answer-grid">
-        {props.question.options.map((option) => {
+        {props.question.options.map((option, index) => {
           const isSelected = props.selectedOptionId === option.id;
           return (
             <button
@@ -42,7 +85,8 @@ export function QuestionCard(props: {
               disabled={props.pending || props.answerLocked}
               onClick={() => props.onSelect(option)}
             >
-              {option.label}
+              <span className="answer-button__prefix">{optionLabels[index] ?? String(index + 1)}</span>
+              <span>{option.label}</span>
             </button>
           );
         })}
@@ -64,8 +108,15 @@ export function BoardView(props: {
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>Поле {props.engineState.board.width}x{props.engineState.board.height}</h2>
-        <span>Ход {props.engineState.turn + 1}</span>
+        <div>
+          <h2>Поле</h2>
+          <p className="body-copy panel-copy">
+            {props.selectedPieceId
+              ? `Доступно стартовых позиций: ${legalOrigins.length}.`
+              : 'Сначала откройте ход ответом и выберите фигуру в трее.'}
+          </p>
+        </div>
+        <span>{CLASSIC_RUN_BOARD_SIZE}x{CLASSIC_RUN_BOARD_SIZE}</span>
       </div>
       <div
         className="board-grid"
@@ -89,7 +140,7 @@ export function BoardView(props: {
               disabled={!isLegalOrigin}
               onClick={() => props.onSelectOrigin({ x, y })}
             >
-              {isLegalOrigin ? '•' : null}
+              {isLegalOrigin ? <span className="board-cell__dot" /> : null}
             </button>
           );
         })}
@@ -107,8 +158,15 @@ export function TrayView(props: {
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>Трей</h2>
-        <span>{props.selectable ? 'Выберите фигуру' : 'Трей заблокирован до верного ответа'}</span>
+        <div>
+          <h2>Трей</h2>
+          <p className="body-copy panel-copy">
+            {props.selectable
+              ? 'Выберите фигуру и поставьте её в одну из подсвеченных стартовых клеток.'
+              : 'Трей заблокирован, пока вопрос не закрыт верным ответом.'}
+          </p>
+        </div>
+        <span>{CLASSIC_RUN_TRAY_SIZE} фигуры</span>
       </div>
       <div className="tray-grid">
         {props.tray.map((piece, index) => (
@@ -119,6 +177,7 @@ export function TrayView(props: {
             disabled={!piece || !props.selectable}
             onClick={() => props.onSelect(index)}
           >
+            <span className="tray-slot__label">Слот {index + 1}</span>
             {piece ? <PiecePreview pieceId={piece.pieceId} /> : <span className="tray-slot__empty">Пусто</span>}
           </button>
         ))}
@@ -144,7 +203,10 @@ export function MoveSummary({ moveEvent }: { moveEvent: MoveEvent }) {
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>Последний ход</h2>
+        <div>
+          <h2>Последний ход</h2>
+          <p className="body-copy panel-copy">Сервер уже подтвердил размещение и пересчитал очки.</p>
+        </div>
         <span>{moveEvent.pieceId}</span>
       </div>
       <dl className="stats-list">
@@ -153,7 +215,7 @@ export function MoveSummary({ moveEvent }: { moveEvent: MoveEvent }) {
           <dd>+{moveEvent.scoreBreakdown.totalPoints}</dd>
         </div>
         <div>
-          <dt>Очищено линий</dt>
+          <dt>Линий очищено</dt>
           <dd>{moveEvent.clearedLineCount}</dd>
         </div>
         <div>
@@ -167,7 +229,7 @@ export function MoveSummary({ moveEvent }: { moveEvent: MoveEvent }) {
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="metric-card">
       <span className="metric-label">{label}</span>
       <strong>{value}</strong>
     </div>
@@ -197,4 +259,21 @@ function PiecePreview({ pieceId }: { pieceId: PieceId }) {
       })}
     </div>
   );
+}
+
+function translateCardType(cardType: GeneratedQuestion['cardType']) {
+  if (cardType === 'single_word_translation') {
+    return 'Одиночное слово';
+  }
+  if (cardType === 'phrase_translation') {
+    return 'Короткая фраза';
+  }
+
+  return 'Артикль + существительное';
+}
+
+function translateDirection(promptLanguage: GeneratedQuestion['promptLanguage'], answerLanguage: GeneratedQuestion['answerLanguage']) {
+  const from = promptLanguage === 'ru' ? 'RU' : 'FR';
+  const to = answerLanguage === 'ru' ? 'RU' : 'FR';
+  return `${from} -> ${to}`;
 }

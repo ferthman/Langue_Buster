@@ -9,6 +9,8 @@ import {
   type LanguageCode,
 } from '@langue-buster/shared';
 
+export * from './short-cycle-recovery.js';
+
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DEFAULT_GENERATOR_VERSION = 'phase6-v1';
 

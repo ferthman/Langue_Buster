@@ -7,6 +7,7 @@ import type {
 import {
   answerEventSchema,
   moveEventSchema,
+  runRecoveryStateSchema,
   runQuestionStateSchema,
   runResultSchema,
   runSessionSchema,
@@ -47,6 +48,7 @@ type RunSessionRow = {
   combo: number;
   seed: number;
   engine_state: string;
+  recovery_state: string | null;
   current_question_state: string | null;
   answer_count: number;
   correct_count: number;
@@ -116,9 +118,9 @@ export class PostgresRunSessionRepository implements RunSessionRepository {
       `
         INSERT INTO run_sessions (
           id, user_id, level_id, direction, status, hearts_remaining, score, combo, seed, engine_state,
-          current_question_state, answer_count, correct_count, wrong_count, move_count, started_at, finished_at
+          recovery_state, current_question_state, answer_count, correct_count, wrong_count, move_count, started_at, finished_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO UPDATE SET
           user_id = EXCLUDED.user_id,
           level_id = EXCLUDED.level_id,
@@ -129,6 +131,7 @@ export class PostgresRunSessionRepository implements RunSessionRepository {
           combo = EXCLUDED.combo,
           seed = EXCLUDED.seed,
           engine_state = EXCLUDED.engine_state,
+          recovery_state = EXCLUDED.recovery_state,
           current_question_state = EXCLUDED.current_question_state,
           answer_count = EXCLUDED.answer_count,
           correct_count = EXCLUDED.correct_count,
@@ -149,6 +152,7 @@ export class PostgresRunSessionRepository implements RunSessionRepository {
         parsed.combo,
         parsed.seed,
         JSON.stringify(parsed.engineState),
+        parsed.recoveryState ? JSON.stringify(parsed.recoveryState) : null,
         parsed.currentQuestionState ? JSON.stringify(parsed.currentQuestionState) : null,
         parsed.answerCount,
         parsed.correctCount,
@@ -377,6 +381,9 @@ function mapRunSessionRow(row: RunSessionRow): RunSession {
     combo: row.combo,
     seed: row.seed,
     engineState: parseJson(row.engine_state),
+    recoveryState: row.recovery_state
+      ? runRecoveryStateSchema.parse(parseJson(row.recovery_state))
+      : undefined,
     currentQuestionState: row.current_question_state
       ? runQuestionStateSchema.parse(parseJson(row.current_question_state))
       : null,

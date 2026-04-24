@@ -35,6 +35,7 @@ const phase7SchemaStatements = [
       combo INTEGER NOT NULL,
       seed INTEGER NOT NULL,
       engine_state TEXT NOT NULL,
+      recovery_state TEXT,
       current_question_state TEXT,
       answer_count INTEGER NOT NULL,
       correct_count INTEGER NOT NULL,
@@ -129,6 +130,9 @@ const phase7SchemaStatements = [
       mastery_state_after TEXT NOT NULL,
       occurred_at TEXT NOT NULL
     )
+  `,
+  `
+    ALTER TABLE run_sessions ADD COLUMN IF NOT EXISTS recovery_state TEXT
   `,
   `
     ALTER TABLE run_results ADD COLUMN IF NOT EXISTS mastery_applied_at TEXT

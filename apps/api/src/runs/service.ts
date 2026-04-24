@@ -1,7 +1,11 @@
 import {
   buildAnswerTelemetryEvent,
+  ContentAnswerError,
+  createShortCycleRecoveryState,
   evaluateAnswer,
   generateQuestion,
+  scheduleShortCycleRecovery,
+  selectNextRecoverySource,
   type DistractorSet,
   type VocabItem,
 } from '@langue-buster/content-core';
@@ -11,6 +15,13 @@ import {
   isRunOver,
   type EngineState as GameEngineState,
 } from '@langue-buster/game-engine';
+import {
+  CLASSIC_RUN_DEFAULT_HEARTS,
+  CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP,
+  launchLevels,
+  runResultSchema,
+  runSessionSchema,
+} from '@langue-buster/shared';
 import type {
   AnalyticsEventEnvelope,
   AnswerDirection,
@@ -20,10 +31,10 @@ import type {
   GeneratedQuestion,
   MoveEvent,
   RunResult,
+  RunRecoveryState,
   RunSession,
   SoftLaunchSettings,
 } from '@langue-buster/shared';
-import { launchLevels, runResultSchema, runSessionSchema } from '@langue-buster/shared';
 import { randomUUID } from 'node:crypto';
 
 import type { RunContentRepository } from './content.js';
@@ -96,7 +107,7 @@ type RunServiceDependencies = {
 
 export type RunService = ReturnType<typeof createRunService>;
 
-const DEFAULT_HEARTS = 3;
+const DEFAULT_HEARTS = CLASSIC_RUN_DEFAULT_HEARTS;
 const DEFAULT_WRONG_ANSWER_HEART_LOSS = 1;
 
 export function createRunService(dependencies: RunServiceDependencies) {
@@ -117,12 +128,16 @@ export function createRunService(dependencies: RunServiceDependencies) {
       const settings = await dependencies.softLaunchSettings?.getActiveSettings();
       const seed = normalizeSeed(seedGenerator());
       const engineState = cloneEngineState(createInitialEngineState({ seed }));
-      const questionState = createQuestionState({
+      const initialRecoveryState = createShortCycleRecoveryState({
+        resurfacingGap: CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP,
+      });
+      const questionSelection = createQuestionState({
         levelId: input.levelId,
         direction: input.direction,
         seed,
         sequence: 0,
         shownAt: startedAt,
+        recoveryState: initialRecoveryState,
         contentRepository: dependencies.contentRepository,
       });
 
@@ -137,7 +152,8 @@ export function createRunService(dependencies: RunServiceDependencies) {
         combo: 0,
         seed,
         engineState,
-        currentQuestionState: questionState,
+        recoveryState: questionSelection.recoveryState,
+        currentQuestionState: questionSelection.questionState,
         answerCount: 0,
         correctCount: 0,
         wrongCount: 0,
@@ -298,9 +314,15 @@ export function createRunService(dependencies: RunServiceDependencies) {
       }
 
       const heartsRemaining = Math.max(0, run.heartsRemaining - effectiveHeartLoss);
+      const recoveryState = scheduleShortCycleRecovery(
+        run.recoveryState,
+        questionState.question.meta.sourceItemId,
+        questionState.sequence,
+      );
       const baseRun: RunSession = {
         ...run,
         heartsRemaining,
+        recoveryState,
         answerCount: run.answerCount + 1,
         wrongCount: run.wrongCount + 1,
       };
@@ -335,12 +357,14 @@ export function createRunService(dependencies: RunServiceDependencies) {
         seed: run.seed,
         sequence: questionState.sequence + 1,
         shownAt: occurredAt,
+        recoveryState,
         contentRepository: dependencies.contentRepository,
       });
       const nextRun = await dependencies.runSessionRepository.save({
         ...baseRun,
         status: 'active',
-        currentQuestionState: nextQuestion,
+        recoveryState: nextQuestion.recoveryState,
+        currentQuestionState: nextQuestion.questionState,
       });
       await recordQuestionShown(dependencies, nextRun);
 
@@ -521,13 +545,15 @@ export function createRunService(dependencies: RunServiceDependencies) {
         seed: run.seed,
         sequence: (questionState.sequence ?? 0) + 1,
         shownAt: occurredAt,
+        recoveryState: run.recoveryState,
         contentRepository: dependencies.contentRepository,
       });
 
       const nextRun = await dependencies.runSessionRepository.save({
         ...baseRun,
         status: 'active',
-        currentQuestionState: nextQuestion,
+        recoveryState: nextQuestion.recoveryState,
+        currentQuestionState: nextQuestion.questionState,
       });
       await recordQuestionShown(dependencies, nextRun);
 
@@ -716,6 +742,7 @@ function createQuestionState(input: {
   seed: number;
   sequence: number;
   shownAt: string;
+  recoveryState?: RunRecoveryState;
   contentRepository: RunContentRepository;
 }) {
   if (!launchLevels.includes(input.levelId as (typeof launchLevels)[number])) {
@@ -723,20 +750,45 @@ function createQuestionState(input: {
   }
 
   const bundle = input.contentRepository.getLevelBundle(input.levelId);
-  const sourceItem = selectSourceItem(bundle.vocabItems, input.seed, input.sequence);
-  const question = createGeneratedQuestion({
-    sourceItem,
-    allVocabItems: bundle.vocabItems,
-    distractorSets: bundle.distractorSets,
-    direction: input.direction,
-  });
+  let recoveryState = input.recoveryState;
 
-  return {
-    sequence: input.sequence,
-    shownAt: input.shownAt,
-    answerState: 'awaiting_answer' as const,
-    question,
-  };
+  for (let attempt = 0; attempt < bundle.vocabItems.length; attempt += 1) {
+    const selection = selectNextRecoverySource({
+      pool: bundle.vocabItems,
+      recoveryState,
+      seed: input.seed + attempt,
+      sequence: input.sequence,
+    });
+
+    try {
+      const question = createGeneratedQuestion({
+        sourceItem: selection.sourceItem,
+        allVocabItems: bundle.vocabItems,
+        distractorSets: bundle.distractorSets,
+        direction: input.direction,
+      });
+
+      return {
+        recoveryState: selection.recoveryState,
+        questionState: {
+          sequence: input.sequence,
+          shownAt: input.shownAt,
+          answerState: 'awaiting_answer' as const,
+          question,
+        },
+      };
+    } catch (error) {
+      if (!(error instanceof ContentAnswerError)) {
+        throw error;
+      }
+
+      if (selection.selectionReason === 'recovery_queue') {
+        recoveryState = selection.recoveryState;
+      }
+    }
+  }
+
+  throw new RunDomainError('run_unavailable', 'No approved content exists for the requested level.');
 }
 
 function createGeneratedQuestion(input: {
@@ -756,20 +808,6 @@ function createGeneratedQuestion(input: {
     answerLanguage,
     generatorVersion: 'phase7-v1',
   });
-}
-
-function selectSourceItem(pool: readonly VocabItem[], seed: number, sequence: number): VocabItem {
-  if (pool.length === 0) {
-    throw new RunDomainError('run_unavailable', 'No approved content exists for the requested level.');
-  }
-
-  const index = normalizeSeed(seed + Math.imul(sequence + 1, 2654435761)) % pool.length;
-  const sourceItem = pool[index];
-  if (!sourceItem) {
-    throw new RunDomainError('run_unavailable', 'A run source item could not be resolved.');
-  }
-
-  return sourceItem;
 }
 
 function normalizeSeed(seed: number): number {

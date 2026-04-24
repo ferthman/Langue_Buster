@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createEmptyBoard, setCellsFilled, type Coordinate } from '@langue-buster/game-engine';
-import type { AppUser, RunSession } from '@langue-buster/shared';
+import { CLASSIC_RUN_DEFAULT_HEARTS, CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP, type AppUser, type RunSession } from '@langue-buster/shared';
 
 import { PostgresUserRepository } from '../auth/repositories.js';
 import { createDatabaseRuntime } from '../db/runtime.js';
@@ -28,7 +28,9 @@ afterEach(async () => {
 
 describe('run service', () => {
   it('produces deterministic initial tray and question state for the same injected seed', async () => {
-    const context = await createServiceContext();
+    const context = await createServiceContext({
+      contentRepository: createStableRunContentRepository(),
+    });
 
     const first = await context.runService.startRun({
       userId: context.user.id,
@@ -55,7 +57,7 @@ describe('run service', () => {
       direction: 'ru_to_fr',
     });
 
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < CLASSIC_RUN_DEFAULT_HEARTS; index += 1) {
       const wrongOptionId = getWrongOptionId(run);
       const response = await context.runService.submitAnswer({
         runId: run.id,
@@ -71,7 +73,7 @@ describe('run service', () => {
 
     const result = await context.runService.getResultForUser(run.id, context.user.id);
     expect(result.status).toBe('failed');
-    expect(result.wrongCount).toBe(3);
+    expect(result.wrongCount).toBe(CLASSIC_RUN_DEFAULT_HEARTS);
   });
 
   it('auto-finalizes a run as completed when the engine reports no legal placements', async () => {
@@ -142,9 +144,42 @@ describe('run service', () => {
       await siblingPool.end();
     }
   });
+
+  it('records short-cycle recovery state after a wrong answer and keeps the next prompt different', async () => {
+    const context = await createServiceContext({
+      contentRepository: createStableRunContentRepository(),
+    });
+    let run = await context.runService.startRun({
+      userId: context.user.id,
+      levelId: 'A1',
+      direction: 'ru_to_fr',
+    });
+
+    const repeatedItemId = run.currentQuestionState?.question.meta.sourceItemId;
+    if (!repeatedItemId) {
+      throw new Error('Expected initial question source item.');
+    }
+
+    const firstWrong = await context.runService.submitAnswer({
+      runId: run.id,
+      userId: context.user.id,
+      selectedOptionId: getWrongOptionId(run),
+      answeredAt: '2026-04-22T00:00:01.000Z',
+    });
+    run = firstWrong.run;
+
+    expect(run.currentQuestionState?.question.meta.sourceItemId).not.toBe(repeatedItemId);
+    expect(run.recoveryState?.pending).toContainEqual({
+      sourceItemId: repeatedItemId,
+      availableAfterSequence: CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP + 1,
+      failureCount: 1,
+    });
+  });
 });
 
-async function createServiceContext() {
+async function createServiceContext(options: {
+  contentRepository?: ReturnType<typeof createRunContentRepository>;
+} = {}) {
   const pool = createTestPool();
   pools.push(pool);
   const runtime = createDatabaseRuntime({
@@ -167,7 +202,7 @@ async function createServiceContext() {
     answerEventRepository,
     moveEventRepository,
     runResultRepository,
-    contentRepository: createRunContentRepository(),
+    contentRepository: options.contentRepository ?? createRunContentRepository(),
     now: () => new Date('2026-04-22T00:00:00.000Z'),
     seedGenerator: () => 777,
   });
@@ -177,6 +212,42 @@ async function createServiceContext() {
     user,
     runService,
     runSessionRepository,
+  };
+}
+
+function createStableRunContentRepository() {
+  const baseRepository = createRunContentRepository();
+  const stableA1Bundle = {
+    ...baseRepository.getLevelBundle('A1'),
+    vocabItems: baseRepository.getLevelBundle('A1').vocabItems.filter((item) => item.id !== 'vocab.a1.hello'),
+  };
+
+  return {
+    ...baseRepository,
+    getLevelBundle(levelId: 'A1' | 'A2') {
+      return levelId === 'A1' ? stableA1Bundle : baseRepository.getLevelBundle(levelId);
+    },
+    findItemById(sourceItemId: string) {
+      if (sourceItemId === 'vocab.a1.hello') {
+        return null;
+      }
+
+      return baseRepository.findItemById(sourceItemId);
+    },
+    getBundleForItem(sourceItemId: string) {
+      if (sourceItemId === 'vocab.a1.hello') {
+        return null;
+      }
+
+      if (sourceItemId.startsWith('vocab.a1.')) {
+        return stableA1Bundle;
+      }
+
+      return baseRepository.getBundleForItem(sourceItemId);
+    },
+    listItemsByLevel(levelId: 'A1' | 'A2') {
+      return levelId === 'A1' ? stableA1Bundle.vocabItems : baseRepository.listItemsByLevel(levelId);
+    },
   };
 }
 

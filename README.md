@@ -20,6 +20,19 @@ The goal is to ship a polished Telegram Mini App that starts narrow, proves rete
 
 ---
 
+## Frontend Foundation
+
+The current Mini App frontend may incorporate ideas from prototype exports, but only selectively:
+- reuse layout and interaction ideas, not prototype architecture;
+- keep gameplay and learning logic in domain packages, not React components;
+- reject clone-like puzzle assets, branding, and glossy board art;
+- keep Russian as the default product UI language;
+- prefer the canonical run order: header, question card, board, tray.
+
+The current integrated foundation uses a deterministic short-cycle recovery queue for wrong answers and a shared classic-run config instead of UI hardcodes.
+
+---
+
 ## Core product truth
 
 This product is:

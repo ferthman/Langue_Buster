@@ -95,9 +95,11 @@ export function RunResultScreen() {
   return (
     <main className="screen">
       <section className="hero-card">
-        <p className="eyebrow">Run Summary</p>
+        <p className="eyebrow">Итоги рана</p>
         <h1>{result.status === 'completed' ? 'Ран завершён' : result.status === 'failed' ? 'Ран остановлен' : 'Ран закрыт'}</h1>
-        <p className="body-copy">Итог приходит из backend summary Phase 7, без клиентских пересчётов.</p>
+        <p className="body-copy">
+          Финальная сводка приходит с сервера без клиентских пересчётов. Ошибки уже учтены в повторении и mastery-пайплайне.
+        </p>
       </section>
 
       <section className="panel">

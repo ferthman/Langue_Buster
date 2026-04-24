@@ -1,4 +1,11 @@
-import type { Coordinate, MoveEvent, QuestionOption, RunResult, RunSession } from '@langue-buster/shared';
+import {
+  CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP,
+  type Coordinate,
+  type MoveEvent,
+  type QuestionOption,
+  type RunResult,
+  type RunSession,
+} from '@langue-buster/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -124,7 +131,7 @@ export function RunScreen() {
         setFeedback({
           tone: 'success',
           title: 'Верно',
-          description: 'Ход открыт. Выберите фигуру в трее и клетку старта на поле.',
+          description: 'Ход открыт. Выберите фигуру в трее, затем поставьте её в одну из подсвеченных клеток.',
         });
       } else {
         telegram.notify('error');
@@ -133,7 +140,7 @@ export function RunScreen() {
           tone: 'error',
           title: 'Неверно',
           description: response.evaluation.penalty
-            ? `Сердца: ${response.run.heartsRemaining}. Новый вопрос уже готов.`
+            ? `Сердца: ${response.run.heartsRemaining}. Слово уйдёт в короткое повторение и вернётся примерно через ${CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP} новых карточек.`
             : 'Попробуйте следующую карточку.',
         });
       }
@@ -300,14 +307,16 @@ export function RunScreen() {
   const moveUnlocked = run.status === 'awaiting_move' && Boolean(selectedPiece);
 
   return (
-    <main className="screen">
-      <RunHeader score={run.score} hearts={run.heartsRemaining} combo={run.combo} level={run.levelId} />
-
-      <div className="button-row">
-        <button type="button" className="secondary-button" onClick={() => { void handleFinish(); }} disabled={pending}>
-          Завершить ран
-        </button>
-      </div>
+    <main className="screen run-screen">
+      <RunHeader
+        score={run.score}
+        hearts={run.heartsRemaining}
+        combo={run.combo}
+        level={run.levelId}
+        turn={run.engineState.turn + 1}
+        pending={pending}
+        onFinish={() => { void handleFinish(); }}
+      />
 
       {feedback ? <FeedbackCard {...feedback} /> : null}
       {error ? <FeedbackCard tone="error" title="Нужна синхронизация" description={error} /> : null}
@@ -320,6 +329,12 @@ export function RunScreen() {
         onSelect={(option) => void handleAnswer(option)}
       />
 
+      <BoardView
+        engineState={run.engineState}
+        selectedPieceId={moveUnlocked && selectedPiece ? selectedPiece.pieceId : undefined}
+        onSelectOrigin={(origin) => void handleMove(origin)}
+      />
+
       <TrayView
         tray={run.engineState.tray}
         selectedIndex={selectedTrayIndex}
@@ -328,12 +343,6 @@ export function RunScreen() {
           telegram.impact('light');
           setSelectedTrayIndex(index === selectedTrayIndex ? null : index);
         }}
-      />
-
-      <BoardView
-        engineState={run.engineState}
-        selectedPieceId={moveUnlocked && selectedPiece ? selectedPiece.pieceId : undefined}
-        onSelectOrigin={(origin) => void handleMove(origin)}
       />
 
       {moveEvent ? <MoveSummary moveEvent={moveEvent} /> : null}

@@ -9,6 +9,12 @@ export type CefrLevelId = z.infer<typeof cefrLevelSchema>;
 
 export const launchLevels = ['A1', 'A2'] as const satisfies readonly CefrLevelId[];
 
+export const CLASSIC_RUN_BOARD_SIZE = 8;
+export const CLASSIC_RUN_TRAY_SIZE = 3;
+export const CLASSIC_RUN_DEFAULT_HEARTS = 5;
+export const CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP = 5;
+export const CLASSIC_RUN_DEFAULT_SHORT_CYCLE_RECENT_WINDOW = 5;
+
 export const cefrLevels = [
   { id: 'A1', label: 'A1 · Старт' },
   { id: 'A2', label: 'A2 · База' },
@@ -182,6 +188,20 @@ export const scoreBreakdownSchema = z.object({
 });
 export type ScoreBreakdown = z.infer<typeof scoreBreakdownSchema>;
 
+export const runRecoveryEntrySchema = z.object({
+  sourceItemId: z.string().trim().min(1),
+  availableAfterSequence: z.number().int().nonnegative(),
+  failureCount: z.number().int().positive(),
+});
+export type RunRecoveryEntry = z.infer<typeof runRecoveryEntrySchema>;
+
+export const runRecoveryStateSchema = z.object({
+  pending: z.array(runRecoveryEntrySchema).default([]),
+  recentSourceItemIds: z.array(z.string().trim().min(1)).default([]),
+  resurfacingGap: z.number().int().positive().default(CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP),
+});
+export type RunRecoveryState = z.infer<typeof runRecoveryStateSchema>;
+
 export const moveValidationResultSchema = z.enum(['accepted', 'rejected']);
 export type MoveValidationResult = z.infer<typeof moveValidationResultSchema>;
 
@@ -196,6 +216,7 @@ export const runSessionSchema = z.object({
   combo: z.number().int().nonnegative(),
   seed: z.number().int().nonnegative(),
   engineState: engineStateSchema,
+  recoveryState: runRecoveryStateSchema.optional(),
   currentQuestionState: runQuestionStateSchema.nullable(),
   answerCount: z.number().int().nonnegative(),
   correctCount: z.number().int().nonnegative(),

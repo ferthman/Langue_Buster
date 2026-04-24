@@ -156,6 +156,29 @@ button {
   gap: 12px;
 }
 
+.run-screen {
+  gap: 14px;
+}
+
+.run-hero {
+  gap: 18px;
+}
+
+.run-hero__top,
+.question-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-hero__top {
+  align-items: flex-start;
+}
+
+.run-hero__action {
+  min-width: 132px;
+}
+
 .panel-header {
   justify-content: space-between;
   align-items: baseline;
@@ -166,7 +189,6 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.run-header > div,
 .metric-card {
   border-radius: 18px;
   background: var(--surface-strong);
@@ -179,6 +201,28 @@ button {
   display: block;
   margin-top: 8px;
   font-size: 1.2rem;
+}
+
+.metric-card--hearts strong {
+  margin-top: 10px;
+}
+
+.heart-meter {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.heart-meter__pip {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(127, 109, 92, 0.16);
+}
+
+.heart-meter__pip.is-active {
+  background: linear-gradient(180deg, #ff9072, #d95d39);
 }
 
 .dashboard-grid {
@@ -241,12 +285,34 @@ button {
   justify-content: flex-start;
   padding: 14px 16px;
   text-align: left;
+  gap: 12px;
 }
 
 .answer-button.is-selected,
 .tray-slot.is-selected {
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(217, 93, 57, 0.18);
+}
+
+.answer-button__prefix,
+.question-card__direction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.85rem;
+}
+
+.question-card__prompt {
+  margin-bottom: 10px;
+}
+
+.panel-copy {
+  margin: 8px 0 0;
 }
 
 .answer-grid {
@@ -279,6 +345,17 @@ button {
   background: rgba(217, 93, 57, 0.12);
 }
 
+.board-cell__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.board-cell:disabled {
+  opacity: 1;
+}
+
 .tray-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -291,6 +368,13 @@ button {
   padding: 12px;
   background: var(--surface-strong);
   color: var(--text-main);
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tray-slot__label {
+  font-size: 0.78rem;
+  color: var(--tg-hint-color);
 }
 
 .tray-slot__empty {
@@ -397,5 +481,16 @@ button {
   .app-shell {
     max-width: 480px;
     margin: 0 auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .run-hero__top,
+  .question-card__meta {
+    flex-direction: column;
+  }
+
+  .run-header {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
