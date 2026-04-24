@@ -1,742 +1,655 @@
-# Implementation Plan
+# Implementation Plan - Version 2.0 (Post-MVP)
 
-Detailed execution plan for the Telegram Mini App that teaches French through a block-puzzle gameplay loop.
+Operational plan for the **post-MVP evolution** of the French Learning Telegram Mini App.
 
-This file is meant to be used as the operational source for:
-- sprint planning;
-- Codex task breakdown;
-- architecture sequencing;
-- MVP scope control;
-- product and content alignment.
+This file is the successor to the MVP execution plan. It assumes the MVP already exists in a usable form with:
+- Telegram auth;
+- Russian UI;
+- A1/A2 launch content;
+- Classic Run;
+- baseline mastery + review queue;
+- admin CMS;
+- analytics and anti-cheat baseline.
 
----
-
-## 0. Product goal
-
-Build a Telegram Mini App where puzzle actions are gated by French language questions, so that:
-- gameplay drives retention;
-- vocabulary recall drives progression;
-- mastery is measurable;
-- content can scale safely through a CMS.
-
-Success means:
-- the app is fun enough to replay;
-- the learning is strong enough to improve recall;
-- the tech stack is maintainable;
-- content operations do not collapse into spreadsheet chaos.
+Version 2.0 is **not** a rewrite.
+It is the first serious product expansion after the MVP proves that the core loop is understandable and replayable.
 
 ---
 
-## 1. Non-negotiable product decisions
+## 0. Purpose of v2.0
 
-- Build as **Telegram Mini App**, not classic Telegram Game.
-- Use **TypeScript end-to-end**.
-- Launch with **A1 and A2 only**.
-- Support **Russian UI + French content** in MVP.
-- Start with **Classic Run** as the only mandatory game mode.
-- Use **server-side validation** for Telegram auth and critical game state.
-- Use **manual editorial QA** for all launch vocabulary.
-- Do not clone Block Blast visuals, assets, or brand identity.
+The goal of v2.0 is to turn the MVP from a promising prototype into a **repeatable habit product**.
+
+That means improving four things at once:
+- the puzzle loop must feel better;
+- the learning loop must feel smarter;
+- the progression loop must create return behavior;
+- the product must become easier to operate and scale.
+
+If MVP proves the core idea, then v2.0 must prove that users come back **because the game-learning loop feels rewarding**, not because they were forced through a novelty spike.
 
 ---
 
-## 2. MVP definition
+## 1. What v2.0 is optimizing for
+
+### Primary product goals
+- raise D1 and D7 retention;
+- increase average runs per active user;
+- improve first-week vocabulary recall for weak items;
+- reduce frustration from harsh failure states;
+- deepen the sense of progression without bloating the app.
+
+### Primary business goals
+- create a product foundation strong enough for:
+  - B1 expansion;
+  - light monetization experiments;
+  - events / missions / live-ops;
+  - stronger referral loops later.
+
+### Primary engineering goals
+- harden contracts and content operations;
+- reduce gameplay/UI drift;
+- support faster iteration on balance, cards, and content;
+- keep domain logic deterministic and testable.
+
+---
+
+## 2. Decisions carried into v2.0
+
+These are the main decisions this v2.0 plan assumes.
+
+### 2.1 Core board loop stays
+- board remains **8x8**;
+- tray remains **3 pieces**;
+- move unlocking still depends on correct answer;
+- game ends when hearts reach zero or no legal placements remain.
+
+### 2.2 Hearts model changes from MVP baseline
+The MVP documentation used **3 hearts** as the recommended penalty model.
+For v2.0, the default should move to **5 hearts** with balancing instrumentation.
+
+Reason:
+- 3 hearts is clean for a first version, but it is probably too punishing for a hybrid product where players are learning and puzzling at the same time.
+- the newer front-facing concept explicitly argues that **5 hearts** is the more balanced starting point, with 4-6 being the healthy range.
+
+### 2.3 Repetition becomes more explicit
+The MVP already includes review and weak-word resurfacing.
+In v2.0, the in-run repetition rule becomes a visible and deterministic mechanic:
+- wrong answer -> item enters short-cycle recovery queue;
+- the item can reappear after roughly **5 new words**;
+- later balancing can test 3 / 5 / adaptive spacing variants.
+
+### 2.4 UI direction stays stable
+Do not redesign the whole visual identity in v2.0.
+Polish the layout, feedback, and clarity.
+Do **not** burn time on a cosmetic rebrand when the real work is retention.
+
+---
+
+## 3. Definition of v2.0 scope
 
 ### In scope
-- Telegram auth
-- onboarding
-- placement test
-- home screen
-- level selection
-- lesson packs
-- classic run
-- end-of-run summary
-- mastery updates
-- review queue
-- stats screen
-- admin CMS
-- analytics events
-- anti-cheat baseline
+- gameplay feel upgrades;
+- answer flow redesign for better readability and faster reactions;
+- 5-heart balancing pass;
+- in-run repetition queue v2;
+- better mastery feedback;
+- richer progression layer;
+- daily / weekly missions;
+- streak logic improvements;
+- expanded review mode;
+- A1/A2 content scaling and cleanup;
+- B1 preparation and controlled beta entry;
+- analytics enrichment;
+- content QA tooling improvements;
+- run resume / recovery improvements;
+- leaderboard/events groundwork if retention supports it.
 
 ### Out of scope
-- PvP
-- guilds / teams
-- hard currency
-- social graph
-- real-time multiplayer
-- advanced cosmetics shop
-- AI-only content generation
-- six levels at launch
-- speech recognition
-- audio pronunciation system
-- deep narrative events
+- real-time multiplayer;
+- clans / guilds;
+- full C1/C2 launch;
+- voice recognition and speaking scoring;
+- deep social graph;
+- complicated hard-currency economy;
+- full App Store / Google Play rewrite;
+- massive art overhaul for style points.
 
 ---
 
-## 3. Delivery phases
+## 4. Product principles for v2.0
 
-## Phase 1 - Product specification freeze
-**Goal:** lock the MVP so development does not drift.
+### 4.1 Do not lose the simplicity of the MVP
+If v2.0 adds five systems but makes the first run harder to understand, it is worse, not better.
+
+### 4.2 Retention beats feature vanity
+A cute feature with no measurable return behavior is decoration.
+
+### 4.3 Learning must stay inside the action loop
+Do not drift into a product where the puzzle is optional and the learning happens somewhere else.
+
+### 4.4 Content quality beats content volume
+A bigger broken course is just a bigger broken course.
+
+### 4.5 Frontend polish must serve gameplay clarity
+Animations, popups, and effects should make decisions clearer and more satisfying - not slower.
+
+---
+
+## 5. v2.0 release thesis
+
+Version 2.0 should feel like this:
+- fewer unfair deaths;
+- more satisfying feedback;
+- weak words come back at the right time;
+- the player clearly sees growth;
+- there is a reason to return tomorrow;
+- the app still feels lightweight inside Telegram.
+
+If a user finishes a run and thinks:
+> “Okay, one more.”
+that is good.
+
+If they finish a run and think:
+> “That was homework in camouflage.”
+then the product still has a hole in it.
+
+---
+
+## 6. Main workstreams
+
+## Workstream A - Gameplay Feel 2.0
+**Goal:** make the core run more satisfying, readable, and less punishing.
 
 ### Tasks
-- [ ] Confirm gameplay loop
-- [ ] Confirm board size: 8x8
-- [ ] Confirm penalty model: 3 hearts
-- [ ] Confirm first card types:
-  - [ ] word translation
-  - [ ] phrase translation
-  - [ ] article + noun
-- [ ] Confirm supported levels at launch: A1, A2
-- [ ] Confirm primary UI language: Russian
-- [ ] Confirm launch metrics
-- [ ] Confirm no-clone visual direction
-- [ ] Freeze initial domain glossary
+- [ ] Move to default **5-heart** run model
+- [ ] Add balancing config for 4 / 5 / 6-heart experiments
+- [ ] Improve piece selection and placement preview
+- [ ] Improve answer-to-placement transition speed
+- [ ] Add stronger correct / wrong / combo feedback states
+- [ ] Improve empty-board and no-move readability
+- [ ] Improve game-over clarity by showing exact fail reason
+- [ ] Add smoother end-of-run summary animation
+- [ ] Tune board difficulty curve through seed balancing
+- [ ] Add pause / recover / reopen-safe run state handling
 
 ### Deliverables
-- [ ] approved gameplay rules
-- [ ] approved MVP scope
-- [ ] approved content schema v1
-- [ ] approved screen list
-- [ ] approved backend module list
+- [ ] gameplay feel checklist
+- [ ] updated balancing config
+- [ ] revised fail-state UX
+- [ ] clearer session summary payload
 
 ### Exit criteria
-- Everyone can describe the MVP in the same way.
-- There is no ambiguity about what is intentionally excluded.
+- first-time and repeat users understand what happened in every failed run;
+- answer -> placement -> score feedback feels immediate;
+- heart loss no longer feels like random punishment.
 
 ---
 
-## Phase 2 - Monorepo and tooling bootstrap
-**Goal:** create a clean technical foundation.
+## Workstream B - Learning Loop 2.0
+**Goal:** make wrong answers useful instead of merely painful.
 
 ### Tasks
-- [ ] Create monorepo
-- [ ] Configure package manager workspace
-- [ ] Configure TypeScript project references
-- [ ] Configure ESLint + Prettier
-- [ ] Configure shared tsconfig
-- [ ] Add Husky / lint-staged if needed
-- [ ] Configure testing stack
-- [ ] Configure environment variable strategy
-- [ ] Add Docker setup
-- [ ] Add CI workflow
-
-### Recommended repo layout
-```text
-apps/
-  miniapp/
-  admin/
-  api/
-
-packages/
-  shared/
-  game-engine/
-  content-core/
-  ui/
-  config/
-```
+- [ ] Implement **short-cycle repetition queue** for recent mistakes
+- [ ] Default resurfacing rule: reintroduce weak item after ~5 new prompts
+- [ ] Add item memory state `recent_error`
+- [ ] Separate mistake sources:
+  - [ ] first-time miss
+  - [ ] repeated miss
+  - [ ] article/gender miss
+  - [ ] speed/impulse miss
+- [ ] Add answer latency capture to learning model
+- [ ] Show “word will return soon” micro-feedback after mistakes
+- [ ] Add end-of-run weak-word recap
+- [ ] Add lightweight “learned / still weak” state chips in run summary
+- [ ] Add focused retry mini-flow for 3-5 worst items from run
+- [ ] Improve review scheduler to distinguish short-cycle recovery from long-interval review
 
 ### Deliverables
-- [ ] working monorepo
-- [ ] clean install script
-- [ ] clean dev scripts
-- [ ] CI checks for lint + test + build
+- [ ] short-cycle recovery queue engine
+- [ ] updated mastery transitions
+- [ ] weak-word recap UI spec
+- [ ] tests for resurfacing timing and duplicate suppression
 
 ### Exit criteria
-- New developer can clone repo and run local environment without black magic.
+- wrong answers measurably increase future recall probability;
+- repeated mistakes return fast enough to matter but not so fast that the run becomes annoying;
+- review mode and in-run learning no longer feel like disconnected systems.
 
 ---
 
-## Phase 3 - Telegram auth and session layer
-**Goal:** secure entry into the app.
+## Workstream C - Question and Card UX 2.0
+**Goal:** improve the front-end interaction layer without changing the core identity.
 
 ### Tasks
-- [ ] Implement Telegram initData parser
-- [ ] Implement server-side initData signature validation
-- [ ] Implement internal user creation / lookup
-- [ ] Implement session issuance
-- [ ] Implement refresh flow
-- [ ] Store Telegram metadata:
-  - [ ] telegram_user_id
-  - [ ] username
-  - [ ] first_name
-  - [ ] language_code
-  - [ ] premium flag
-- [ ] Add auth middleware / guards
-- [ ] Add auth tests
-
-### API
-- [ ] `POST /auth/telegram`
-- [ ] `POST /auth/refresh`
+- [ ] Rebuild question card layout for maximum readability on mobile
+- [ ] Keep 4 large answer options as default
+- [ ] Test answer reveal timing:
+  - [ ] instant feedback
+  - [ ] 250-400 ms lock-state
+  - [ ] fast transition into placement state
+- [ ] Improve drag interaction so question state is obvious before placement
+- [ ] Add one-handed ergonomics pass for common Telegram screen heights
+- [ ] Tune font sizing and spacing for Russian source words and French options
+- [ ] Improve support for long phrases and article+noun tasks
+- [ ] Add stronger visual distinction between:
+  - [ ] correct answer
+  - [ ] wrong answer
+  - [ ] locked move
+  - [ ] unlocked move
+- [ ] Keep current color direction stable unless usability data says otherwise
 
 ### Deliverables
-- [ ] production-safe auth flow
-- [ ] unit tests
-- [ ] integration tests
+- [ ] gameplay HUD v2 spec
+- [ ] question card component v2
+- [ ] motion timing tokens
+- [ ] interaction test checklist
 
 ### Exit criteria
-- User can open Mini App from Telegram and receive a valid internal session.
-- Backend rejects tampered init data.
+- users rarely mis-tap due to layout issues;
+- answer state is readable in under a second;
+- UI feels improved, not reinvented for no reason.
 
 ---
 
-## Phase 4 - Core game engine
-**Goal:** implement puzzle logic as deterministic pure domain logic.
+## Workstream D - Progression and Retention 2.0
+**Goal:** give players reasons to return beyond raw score chasing.
 
 ### Tasks
-- [ ] Define board model
-- [ ] Define piece model
-- [ ] Define piece generation strategy
-- [ ] Implement placement validation
-- [ ] Implement line clear logic
-- [ ] Implement combo logic
-- [ ] Implement run-over condition
-- [ ] Implement score calculation
-- [ ] Implement serialization for run state
-- [ ] Add full unit tests
-
-### Engine rules
-- board size: 8x8
-- active tray size: 3 pieces
-- deterministic validation
-- server-compatible logic
-- pure functions where possible
+- [ ] Add daily mission system v1
+- [ ] Add weekly challenge system v1
+- [ ] Add streak protection / recovery rule
+- [ ] Add milestone rewards for:
+  - [ ] first perfect run
+  - [ ] 3-day streak
+  - [ ] 10 mastered words
+  - [ ] zero-mistake review set
+- [ ] Add clearer level map progress indicators
+- [ ] Add lesson mastery gates based on both score and learning quality
+- [ ] Add “today you learned” summary card
+- [ ] Add post-run recommendation:
+  - [ ] continue classic run
+  - [ ] do quick review
+  - [ ] continue lesson
+- [ ] Add return triggers for unfinished lessons / weak clusters
 
 ### Deliverables
-- [ ] reusable `game-engine` package
-- [ ] test coverage for all core rules
-- [ ] seed-based reproducibility
+- [ ] retention loop spec
+- [ ] mission engine v1
+- [ ] post-run recommendation logic
+- [ ] progress widgets for home screen
 
 ### Exit criteria
-- Same inputs always produce same outputs.
-- Game logic is not dependent on UI framework.
+- home screen clearly communicates what to do next;
+- return behavior is driven by useful goals, not fake noise;
+- progression is visible even on mediocre puzzle runs.
 
 ---
 
-## Phase 5 - Content domain and vocabulary schema
-**Goal:** define how learning content is represented.
+## Workstream E - Content Operations 2.0
+**Goal:** make content scaling safer before broadening level coverage.
 
 ### Tasks
-- [ ] Design `VocabItem` schema
-- [ ] Design `Lesson` schema
-- [ ] Design `Topic` schema
-- [ ] Design `DistractorSet` schema
-- [ ] Design `Level` schema
-- [ ] Design content statuses:
-  - [ ] draft
-  - [ ] on_review
-  - [ ] approved
-  - [ ] archived
-- [ ] Define content validation rules
-- [ ] Implement shared zod schemas
-- [ ] Define editorial import format
-
-### Required content fields
-- [ ] lemma
-- [ ] surface_form
-- [ ] part of speech
-- [ ] article / gender where relevant
-- [ ] Russian translation
-- [ ] CEFR level
-- [ ] topic
-- [ ] example sentence
-- [ ] distractors
-- [ ] source
-- [ ] status
-- [ ] frequency score
-- [ ] editorial notes
+- [ ] Expand and clean A1 launch set
+- [ ] Expand and clean A2 launch set
+- [ ] Add stronger distractor QA tooling
+- [ ] Add duplicate / near-duplicate detector for translations and distractors
+- [ ] Add article/gender validation rules for noun cards
+- [ ] Add phrase-card QA workflow
+- [ ] Add content issue flags from live telemetry
+- [ ] Add editor dashboard for high-failure items
+- [ ] Add content regression tests tied to published packs
+- [ ] Prepare B1 content schema extensions without forcing B1 full launch
 
 ### Deliverables
-- [ ] content schema v1
-- [ ] migration plan
-- [ ] import template
+- [ ] content QA dashboard
+- [ ] ambiguity report tooling
+- [ ] updated import validations
+- [ ] approved A1/A2 cleanup pack
+- [ ] B1 beta-ready schema
 
 ### Exit criteria
-- Every learning item can be validated consistently before publication.
+- editors can identify broken items without hunting through logs like archaeologists;
+- live error clusters map cleanly to content fixes;
+- B1 can start as a controlled rollout, not a panic dump.
 
 ---
 
-## Phase 6 - Answer evaluation layer
-**Goal:** connect language questions to the game loop.
+## Workstream F - Content Expansion 2.0
+**Goal:** grow content only after A1/A2 quality is stable.
 
 ### Tasks
-- [ ] Define card types
-- [ ] Implement question generation per card type
-- [ ] Implement distractor selection rules
-- [ ] Implement correctness evaluation
-- [ ] Define penalties for wrong answers
-- [ ] Define move unlock behavior
-- [ ] Define answer telemetry
-- [ ] Add tests for ambiguous answer prevention
-
-### MVP card types
-- [ ] single word translation
-- [ ] phrase translation
-- [ ] article + noun selection
+- [ ] Raise total approved A1 coverage
+- [ ] Raise total approved A2 coverage
+- [ ] Define B1 pilot lesson structure
+- [ ] Add new card variants only if they are operationally supportable
+- [ ] Prioritize phrase/context tasks for upper-A2 and B1 transition
+- [ ] Add topic packs that increase replay variety without fragmenting the product
+- [ ] Add event packs or temporary packs only after baseline content stability
 
 ### Deliverables
-- [ ] answer evaluator
-- [ ] distractor validator
-- [ ] card generation service
+- [ ] A1/A2 expansion release
+- [ ] B1 pilot lesson pack
+- [ ] level transition rules for B1 beta access
 
 ### Exit criteria
-- Each question has exactly one correct answer.
-- A correct answer reliably unlocks the move.
+- A1/A2 feels complete enough that users are not looping the same tiny pool forever;
+- B1 exists as a controlled expansion, not a promise written in smoke.
 
 ---
 
-## Phase 7 - Run session backend
-**Goal:** support full gameplay sessions.
+## Workstream G - Analytics and Experimentation 2.0
+**Goal:** turn v2.0 into a measurable product rather than a vibes project.
 
 ### Tasks
-- [ ] Define `RunSession` schema
-- [ ] Define `MoveEvent` schema
-- [ ] Define `AnswerEvent` schema
-- [ ] Implement run start
-- [ ] Implement answer submit
-- [ ] Implement move submit
-- [ ] Implement end-of-run summary
-- [ ] Implement server-side score recomputation
-- [ ] Implement seed strategy
-- [ ] Persist run result summary
-
-### API
-- [ ] `POST /runs/start`
-- [ ] `POST /runs/:runId/answer`
-- [ ] `POST /runs/:runId/move`
-- [ ] `POST /runs/:runId/finish`
+- [ ] Add event coverage for heart-loss patterns
+- [ ] Add event coverage for repeat-item resurfacing
+- [ ] Track answer latency buckets
+- [ ] Track no-move board failures by seed and piece set
+- [ ] Track mission completion
+- [ ] Track weak-word recovery rate
+- [ ] Track run summary CTA selection
+- [ ] Track rage-quit indicators:
+  - [ ] quit after mistake
+  - [ ] quit after consecutive mistake cluster
+  - [ ] quit after impossible-feeling board
+- [ ] Build experiment config support for:
+  - [ ] 3 vs 5 vs 6 hearts
+  - [ ] 3 vs 5 resurfacing interval
+  - [ ] recap on/off
+  - [ ] immediate review prompt on/off
 
 ### Deliverables
-- [ ] server-backed run system
-- [ ] anti-tamper validation
-- [ ] summary payload for frontend
+- [ ] v2 analytics taxonomy
+- [ ] experiment config layer
+- [ ] retention dashboard v2
+- [ ] frustration dashboard
 
 ### Exit criteria
-- Backend can validate each run step.
-- Client is not the source of truth for score.
+- product decisions can be made from data rather than testosterone and intuition;
+- every major v2.0 balance hypothesis is instrumented.
 
 ---
 
-## Phase 8 - Mastery, review, and progression
-**Goal:** separate learning progress from raw game score.
+## Workstream H - Technical Hardening 2.0
+**Goal:** make iteration safer and faster as the product grows.
 
 ### Tasks
-- [ ] Define `UserMastery` schema
-- [ ] Define `ReviewQueueItem` schema
-- [ ] Implement mastery states:
-  - [ ] new
-  - [ ] learning
-  - [ ] weak
-  - [ ] stable
-  - [ ] mastered
-- [ ] Define mastery update rules
-- [ ] Implement review queue scheduler
-- [ ] Implement weak-word resurfacing
-- [ ] Implement run-end mastery update
-- [ ] Implement review mode feed
+- [ ] Add run-resume safety for Telegram reopen and app backgrounding
+- [ ] Improve server-side validation for answer/move sequencing
+- [ ] Version gameplay config separately from content config
+- [ ] Add migration-safe feature flags
+- [ ] Add snapshot tests for board state serialization
+- [ ] Add regression tests for recovery queue logic
+- [ ] Improve admin audit logs
+- [ ] Add release notes discipline for gameplay/content config changes
+- [ ] Add internal tools to replay suspicious sessions from logs
 
 ### Deliverables
-- [ ] mastery engine v1
-- [ ] review queue generator
-- [ ] review API
+- [ ] config versioning model
+- [ ] replay/debug tooling
+- [ ] stronger test matrix
+- [ ] release checklist v2
 
 ### Exit criteria
-- Weak words come back more often.
-- Strong words gradually move into longer intervals.
+- balance changes can be rolled out without breaking old runs;
+- suspicious sessions can be reconstructed;
+- content and gameplay regressions are caught earlier.
 
 ---
 
-## Phase 9 - Mini App frontend
-**Goal:** build a smooth Telegram-facing app.
+## Workstream I - Monetization Readiness (Only if retention is earned)
+**Goal:** prepare gentle monetization without poisoning the core loop.
 
-### Screens
-- [ ] splash
-- [ ] onboarding
-- [ ] placement test
-- [ ] home
-- [ ] level map
-- [ ] classic run
-- [ ] review mode
-- [ ] profile / stats
-- [ ] error / empty states
+### Hard rule
+Monetization enters only after retention and content quality are acceptable.
+No circus before product-market basics exist.
 
 ### Tasks
-- [ ] Integrate Telegram WebApp SDK
-- [ ] Read theme params
-- [ ] Support dark mode
-- [ ] Implement responsive layout
-- [ ] Build question card UI
-- [ ] Build board UI
-- [ ] Build tray UI
-- [ ] Build run summary UI
-- [ ] Implement haptic feedback
-- [ ] Implement animation layer
-- [ ] Add loading / retry states
-
-### UX constraints
-- large tap targets
-- zero clutter
-- fast transitions
-- readable question card
-- no asset cloning from existing games
+- [ ] Add revive-with-ad experiment design
+- [ ] Add optional extra-heart experiment design
+- [ ] Add cosmetic theme system foundation
+- [ ] Add premium/no-ads concept spec
+- [ ] Design monetization guardrails so learning fairness is not destroyed
 
 ### Deliverables
-- [ ] usable Mini App frontend
-- [ ] Telegram-compatible layout
-- [ ] interaction polish pass
+- [ ] monetization experiment brief
+- [ ] economy guardrails doc
+- [ ] cosmetic architecture note
 
 ### Exit criteria
-- A new user can complete first onboarding and first run without confusion.
+- monetization is additive, not predatory;
+- ad logic does not break session rhythm;
+- premium concepts do not fragment the learning product.
 
 ---
 
-## Phase 10 - Admin CMS
-**Goal:** make content operations survivable.
+## 7. Proposed v2.0 release phases
+
+## Phase 1 - MVP Audit and Delta Lock
+**Goal:** define exactly what changes from MVP to v2.0.
 
 ### Tasks
-- [ ] Build vocab item list
-- [ ] Build vocab item detail editor
-- [ ] Build lesson editor
-- [ ] Build topic editor
-- [ ] Build bulk import
-- [ ] Build bulk edit
-- [ ] Build item preview
-- [ ] Build QA flags
-- [ ] Build publish / archive workflow
-- [ ] Build change history log
-
-### CMS requirements
-- preview each item as in actual game card
-- filter by level / topic / status
-- mark problematic items
-- avoid raw spreadsheet-only operations
-
-### Deliverables
-- [ ] content CMS v1
-- [ ] import flow
-- [ ] review workflow
+- [ ] Audit live MVP behavior
+- [ ] Audit current telemetry gaps
+- [ ] Confirm v2.0 KPI targets
+- [ ] Confirm 5-heart default as v2 test baseline
+- [ ] Confirm short-cycle resurfacing rule
+- [ ] Freeze v2.0 non-goals
 
 ### Exit criteria
-- Editor can create, review, preview, approve, and publish content without touching database directly.
+- there is one shared definition of v2.0;
+- no one is secretly building a different product in their head.
 
 ---
 
-## Phase 11 - Content population
-**Goal:** prepare real launch content.
+## Phase 2 - Gameplay and Front Polish
+**Goal:** improve readability, fairness, and feel.
 
-### Tasks
-- [ ] Build A1 source list
-- [ ] Build A2 source list
-- [ ] Normalize entries
-- [ ] Map to lessons and topics
-- [ ] Add examples
-- [ ] Add distractors
-- [ ] Review article/gender correctness
-- [ ] Run ambiguity QA
-- [ ] Publish first launch set
-
-### Content target
-- [ ] 300 items minimum
-- [ ] 500 items preferred
-- [ ] all manually reviewed
-
-### Deliverables
-- [ ] launch content pack
-- [ ] QA report
-- [ ] blocked/problematic item list
+### Includes
+- heart model changes
+- feedback timing
+- answer card polish
+- fail-state polish
+- placement preview polish
+- summary UX polish
 
 ### Exit criteria
-- Launch content is clean enough that users do not keep hitting broken questions.
+- gameplay feels noticeably better without retraining the whole user base.
 
 ---
 
-## Phase 12 - Analytics and observability
-**Goal:** measure what matters from day one.
+## Phase 3 - Review and Mastery 2.0
+**Goal:** connect mistake recovery to actual memory improvement.
 
-### Tasks
-- [ ] Define event taxonomy
-- [ ] Instrument onboarding events
-- [ ] Instrument gameplay events
-- [ ] Instrument answer correctness events
-- [ ] Instrument run finish events
-- [ ] Instrument review mode usage
-- [ ] Instrument retention markers
-- [ ] Add backend logs
-- [ ] Add error tracking
-- [ ] Build baseline dashboards
-
-### Must-track metrics
-- [ ] onboarding completion
-- [ ] first run start
-- [ ] first run finish
-- [ ] answer accuracy
-- [ ] D1 retention
-- [ ] D7 retention
-- [ ] run length
-- [ ] weak-word cluster frequency
-- [ ] lesson completion
-- [ ] review adoption
-
-### Deliverables
-- [ ] analytics schema
-- [ ] dashboards
-- [ ] error monitoring
+### Includes
+- recovery queue
+- recap UX
+- retry mini-flow
+- mastery state updates
+- review scheduler split
 
 ### Exit criteria
-- Team can answer “where users drop?” and “which content is failing?” without guessing.
+- weak-word handling becomes visible and useful.
 
 ---
 
-## Phase 13 - Anti-cheat baseline
-**Goal:** stop obvious abuse before leaderboards become a circus.
+## Phase 4 - Progression and Return Loops
+**Goal:** create daily/weekly re-entry reasons.
 
-### Tasks
-- [ ] Never trust client score
-- [ ] Sign or store game seeds
-- [ ] Recompute move legality server-side
-- [ ] Recompute score server-side
-- [ ] Rate-limit key endpoints
-- [ ] Detect impossible timings
-- [ ] Detect suspicious perfection patterns
-- [ ] Log anomalies for moderation review
-
-### Deliverables
-- [ ] anti-cheat guardrails
-- [ ] anomaly logs
-- [ ] server validation checks
+### Includes
+- missions
+- streak logic
+- lesson progress UI
+- next-step recommendations
+- home screen v2
 
 ### Exit criteria
-- Basic client tampering no longer gives free leaderboard dominance.
+- return path is explicit and motivating.
 
 ---
 
-## Phase 14 - QA and balancing
-**Goal:** make the experience playable, fair, and understandable.
+## Phase 5 - Content Quality and Scale
+**Goal:** improve A1/A2 depth and prep B1 safely.
 
-### QA tracks
-#### Functional QA
-- [ ] auth
-- [ ] run flow
-- [ ] review flow
-- [ ] CMS publishing
-- [ ] session restore
-- [ ] Telegram reopen behavior
-
-#### Content QA
-- [ ] translation correctness
-- [ ] distractor quality
-- [ ] level appropriateness
-- [ ] article/gender accuracy
-- [ ] ambiguity checks
-
-#### Game balance QA
-- [ ] board readability
-- [ ] piece pacing
-- [ ] penalty severity
-- [ ] combo reward feel
-- [ ] average run duration
-
-#### UX QA
-- [ ] onboarding clarity
-- [ ] tap accuracy
-- [ ] animation speed
-- [ ] error messaging
-- [ ] dark mode polish
-
-### Deliverables
-- [ ] QA checklist
-- [ ] balance notes
-- [ ] bug triage board
+### Includes
+- A1/A2 cleanup
+- telemetry-driven content QA
+- B1 pilot structure
+- phrase/context enrichment
 
 ### Exit criteria
-- First-time user experience is clean.
-- Broken or unfair content is below acceptable threshold.
+- content scale grows without quality collapse.
 
 ---
 
-## Phase 15 - Soft launch
-**Goal:** release small, learn fast, avoid public embarrassment.
+## Phase 6 - Experimentation and Hardening
+**Goal:** turn v2 into a stable iteration platform.
 
-### Tasks
-- [ ] Select small test cohort
-- [ ] Launch with A1-A2 only
-- [ ] Monitor live analytics
-- [ ] Review weak items daily
-- [ ] Patch obvious content issues quickly
-- [ ] Tune penalty curve
-- [ ] Tune mastery thresholds
-- [ ] Tune review resurfacing frequency
-
-### Success metrics for soft launch
-- [ ] acceptable first session completion rate
-- [ ] acceptable D1 retention
-- [ ] no catastrophic content failure clusters
-- [ ] positive replay signal
-- [ ] users understand the loop without manual explanation
-
-### Deliverables
-- [ ] launch report
-- [ ] retention report
-- [ ] content issue report
-- [ ] tuning backlog
+### Includes
+- config versioning
+- experiments
+- replay tools
+- stronger regression coverage
+- monetization readiness only if earned
 
 ### Exit criteria
-- Product shows real replay potential.
-- The app feels like a game with learning, not homework in disguise.
+- the product can evolve without becoming a bug farm with a French accent.
 
 ---
 
-## 4. Suggested sprint order
+## 8. KPI targets for v2.0
 
-### Sprint 1
-- spec freeze
-- monorepo bootstrap
-- Telegram auth
-- DB setup
-- shared types
+The exact numbers should be finalized from MVP baseline.
+But v2.0 should explicitly target movement in these areas:
 
-### Sprint 2
-- board engine
-- run session backend
-- answer evaluator
-- basic frontend shell
+### Engagement
+- [ ] increase runs per active user
+- [ ] increase average session depth
+- [ ] reduce quit-after-first-error rate
 
-### Sprint 3
-- classic run UI
-- mastery logic
-- run summary
-- profile basics
+### Learning
+- [ ] improve weak-word recovery rate
+- [ ] improve second-chance correctness after recent error
+- [ ] reduce repeated misses on article+noun tasks
 
-### Sprint 4
-- admin CMS CRUD
-- bulk import
-- preview tools
-- content QA tooling
+### Retention
+- [ ] improve D1 retention
+- [ ] improve D7 retention
+- [ ] improve lesson return completion
 
-### Sprint 5
-- analytics
-- anti-cheat baseline
-- review mode
-- balancing pass
-
-### Sprint 6
-- onboarding polish
-- placement test
-- bug fixing
-- soft launch prep
+### Product health
+- [ ] reduce ambiguity-related content failures
+- [ ] reduce “felt unfair” board outcomes
+- [ ] reduce unresumable or broken runs
 
 ---
 
-## 5. Codex execution strategy
+## 9. Suggested implementation order for Codex / agents
 
-### Rules for using Codex
-- never ask for the whole platform in one prompt;
-- isolate one module per task;
-- require tests for domain-critical logic;
-- keep DTOs and contracts explicit;
-- ask for pure functions in game logic;
-- validate all Prisma and API output against shared schemas.
+Do not ask for “version 2” in one giant prompt.
+That is just a premium way to buy yourself a debugging festival.
 
-### Good Codex task examples
-- [ ] Create a pnpm monorepo with apps/api, apps/miniapp, apps/admin, and packages/shared
-- [ ] Implement Telegram initData validation in NestJS with unit tests
-- [ ] Build a pure TypeScript 8x8 board engine with piece placement validation and line clear logic
-- [ ] Define Prisma models for User, RunSession, VocabItem, Lesson, and UserMastery
-- [ ] Create zod schemas for VocabItem and DistractorSet with validation rules
-- [ ] Build REST endpoints for run start, answer submit, move submit, and finish summary
-- [ ] Build a React question card component optimized for Telegram mobile viewport
+### Recommended order
+1. audit current MVP contracts and telemetry
+2. implement gameplay config versioning
+3. implement 5-heart balancing support
+4. implement recovery queue engine and tests
+5. rebuild question card and answer flow UX
+6. add recap / retry mini-flow
+7. add mission engine and home screen progress widgets
+8. add content QA dashboards and high-failure item tooling
+9. prepare B1 beta schema and content gates
+10. add experimentation layer and dashboards
 
-### Bad Codex prompt example
-- [ ] “Build the whole French app with all features”
-
-That prompt is basically asking the model to freestyle its own future mistakes.
-
----
-
-## 6. Risks and countermeasures
-
-### Risk 1 - Content quality collapse
-**Problem:** bad translations, ambiguous distractors, broken level mapping  
-**Countermeasure:** manual editorial QA + preview tools + launch with small content set
-
-### Risk 2 - Puzzle is fun, learning is weak
-**Problem:** players optimize score but do not retain vocabulary  
-**Countermeasure:** mastery tracking, review queue, weak-word resurfacing
-
-### Risk 3 - Learning is strong, gameplay is boring
-**Problem:** app feels like flashcards wearing a fake moustache  
-**Countermeasure:** polish combo loop, tactile feedback, quick runs, satisfying board interactions
-
-### Risk 4 - Telegram auth/security mistakes
-**Problem:** trusting unsafe client data  
-**Countermeasure:** strict server-side validation and short-lived internal sessions
-
-### Risk 5 - Codex-generated architecture drift
-**Problem:** inconsistent contracts and messy repo structure  
-**Countermeasure:** freeze architecture, centralize schemas, break tasks into modules
-
-### Risk 6 - Launching too many levels
-**Problem:** content debt explodes  
-**Countermeasure:** A1-A2 only at first launch
+### Example Codex tasks
+- [ ] Add gameplay config versioning with support for heart-count experiments and resurfacing interval experiments
+- [ ] Implement short-cycle mistake recovery queue in `packages/content-core` or equivalent learning domain package with tests
+- [ ] Refactor gameplay question card for mobile Telegram viewport without changing color palette
+- [ ] Add end-of-run weak-word recap component and API payload support
+- [ ] Build admin dashboard widget for high-failure vocabulary items using existing analytics events
+- [ ] Implement run-resume handling for Telegram reopen/background flows
 
 ---
 
-## 7. Launch readiness checklist
+## 10. Risks specific to v2.0
+
+### Risk 1 - Overcomplication
+**Problem:** v2 adds missions, recap, streaks, retries, and B1 prep all at once, making the app heavier.
+
+**Countermeasure:** release in slices, keep first-run clarity sacred.
+
+### Risk 2 - Hearts change masks weak design
+**Problem:** increasing hearts may reduce frustration but hide bad board pacing or bad question quality.
+
+**Countermeasure:** instrument board failure reasons and content failure reasons separately.
+
+### Risk 3 - Repetition becomes annoying
+**Problem:** weak words come back so often that users feel harassed by the same mistake.
+
+**Countermeasure:** add duplicate suppression, cooldown rules, and telemetry on resurfacing annoyance.
+
+### Risk 4 - Front polish drifts into clone territory
+**Problem:** in trying to improve feel, UI gets too close to commercial puzzle references.
+
+**Countermeasure:** preserve original layout logic, avoid asset mimicry, keep the style guide explicit.
+
+### Risk 5 - B1 arrives too early
+**Problem:** team expands content surface before A1/A2 quality is stable.
+
+**Countermeasure:** B1 only as gated beta after A1/A2 error rates are acceptable.
+
+### Risk 6 - Missions become fake chores
+**Problem:** retention systems feel manipulative rather than useful.
+
+**Countermeasure:** missions must align with learning progress, not random tapping.
+
+---
+
+## 11. v2.0 release checklist
 
 ### Product
-- [ ] onboarding is clear
-- [ ] first run feels good
-- [ ] users understand why answers unlock moves
+- [ ] 5-heart model shipped behind configurable flag
+- [ ] recovery queue working
+- [ ] recap flow working
+- [ ] missions/streak logic understandable
+- [ ] home screen communicates next best action
 
 ### Content
-- [ ] 300-500 reviewed items ready
-- [ ] no major ambiguity bugs
-- [ ] A1 and A2 lessons complete
+- [ ] A1 high-failure items reviewed
+- [ ] A2 high-failure items reviewed
+- [ ] ambiguity tooling active
+- [ ] B1 beta pack isolated from main release
 
 ### Tech
-- [ ] Telegram auth secure
-- [ ] backend stable
-- [ ] analytics live
-- [ ] error monitoring live
-- [ ] anti-cheat baseline live
+- [ ] run resume safe
+- [ ] config versioning live
+- [ ] analytics events complete
+- [ ] regression tests updated
+- [ ] admin audit trail improved
 
 ### Ops
-- [ ] CMS usable
-- [ ] rollback plan exists
-- [ ] issue triage process exists
-- [ ] soft launch support workflow exists
+- [ ] balance tuning playbook exists
+- [ ] content issue triage exists
+- [ ] experiment reporting exists
+- [ ] rollback plan exists for gameplay config changes
 
 ---
 
-## 8. First post-launch decisions
+## 12. Final recommendation
 
-After the first real cohort, decide based on data:
+The smartest v2.0 is not:
+- more features for the sake of looking bigger;
+- more levels because the roadmap looks lonely;
+- more monetization because ads are easy to imagine.
 
-- If replay is strong but errors are random -> improve content quality.
-- If users like review more than classic run -> strengthen review mode and short-session loops.
-- If puzzle engagement is strong -> deepen puzzle systems.
-- If users struggle to understand progression -> simplify progression UI.
-- If A1 retention is good -> expand A2 content.
-- If A2 performs well -> start B1 planning.
+The smartest v2.0 is:
+- a better feeling run;
+- a more useful mistake loop;
+- clearer visible progress;
+- stronger return behavior;
+- safer content scaling.
 
-Do not scale because the roadmap says so. Scale because the data earns it.
-
----
-
-## 9. Final recommendation
-
-Ship:
-- Russian UI
-- A1-A2
-- 1 core mode
-- 300-500 polished items
-- strong telemetry
-- real editorial QA
-
-Then learn from reality.
-
-The biggest trap in this project is building either:
-1. a boring course painted as a game, or
-2. a shiny game with learning stapled onto it.
-
-The only version worth shipping is the middle path:
-**short, clean, addictive gameplay where actual knowledge changes what the player can do.**
+In plain language:
+MVP proves the idea.
+**v2.0 must prove the habit.**

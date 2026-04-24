@@ -294,9 +294,9 @@ export class PostgresRunResultRepository implements RunResultRepository {
       `
         INSERT INTO run_results (
           run_id, user_id, level_id, direction, status, final_score, cleared_lines_total,
-          correct_count, wrong_count, started_at, finished_at, duration_ms
+          correct_count, wrong_count, started_at, finished_at, duration_ms, mastery_applied_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (run_id) DO UPDATE SET
           user_id = EXCLUDED.user_id,
           level_id = EXCLUDED.level_id,

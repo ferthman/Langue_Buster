@@ -1,34 +1,41 @@
 # AGENTS.md
 
-Operational guide for AI coding agents working on the **French Learning Mini App**.
+Operational guide for coding agents working on the **French Learning Mini App**.
 
-This file defines how agents should behave, what they are allowed to change, how they should break work down, and which product constraints are non-negotiable.
+This file defines how agents should behave, how work must be decomposed, which product rules are non-negotiable, and how to avoid turning the repository into elegant-looking nonsense.
 
-The goal is simple: **ship a maintainable Telegram Mini App for learning French through a block-puzzle gameplay loop without turning the repository into spaghetti theatre**.
+The main objective is simple:
+
+**ship a maintainable Telegram Mini App for learning French through a deterministic block-puzzle gameplay loop with editorially controlled content and clear product boundaries.**
 
 ---
 
-## 1. Project summary
+## 1. Read this first
+
+Before making meaningful changes, every agent must read:
+- `README.md`
+- `plan.md`
+- `AGENTS.md`
+
+Treat these three files as the current source of truth.
+If older code or docs disagree with them, flag the mismatch instead of silently inventing a third reality.
+
+---
+
+## 2. Product summary
 
 ### Product
-A **Telegram Mini App** for learning French through game sessions inspired by the block-puzzle genre.
+A Telegram Mini App for learning French through a puzzle loop.
+To place a block, the player must answer a language question correctly.
 
-To place a block, the player must answer a language prompt correctly:
+### Learning directions
+Supported or planned prompt directions include:
 - Russian -> French
 - French -> Russian
-- later: phrase/context/grammar variants
+- phrase/context variants later
 
-### Learning structure
-The app is organized by **CEFR levels**:
-- A1
-- A2
-- B1
-- B2
-- C1
-- C2
-
-### MVP
-The MVP is intentionally narrow:
+### Scope discipline
+#### MVP
 - Russian UI
 - French learning content
 - A1 and A2 only
@@ -37,87 +44,166 @@ The MVP is intentionally narrow:
 - mastery tracking
 - review queue
 - editorial CMS
-- analytics from day 1
+- analytics baseline
 
-### Core product truth
-This is **not** a generic vocabulary app.
-This is **not** a clone of Block Blast.
-This is **not** a fully AI-generated language product.
+#### v2.0 after MVP
+- 5-heart balancing pass
+- explicit short-cycle repetition in-run
+- question card UX upgrade
+- progression and return-behavior systems
+- content cleanup and scale-up
+- B1 preparation in controlled scope
+
+### Core truth
+This is:
+- not a generic flashcard app;
+- not a Block Blast clone;
+- not a fully AI-generated content product.
 
 It is a **learning game with deterministic puzzle rules and editorially controlled content**.
 
 ---
 
-## 2. Primary engineering principles
+## 3. Canonical gameplay rules
 
-Agents must follow these principles at all times.
+Agents must not drift from these rules unless the docs are explicitly updated.
 
-### 2.1 Keep domain logic pure
+### Board and session
+- board size: **8x8**
+- tray size: **3 pieces**
+- new set appears after all 3 pieces are used
+- a move must be validated by deterministic engine logic
+
+### Move gating
+- every move requires answering a language question correctly
+- default answer format is **4 options** with exactly **1 correct answer**
+- correct answer unlocks placement
+- wrong answer applies penalty and affects learning recovery state
+
+### Run end conditions
+A run ends when:
+- hearts reach zero; or
+- no legal placements remain for the available pieces
+
+### Hearts
+- older MVP baseline: **3 hearts**
+- current preferred v2.0 default: **5 hearts**
+- balancing experiments may test **4 / 5 / 6 hearts**
+
+### Repetition
+- wrong answer must feed a short-cycle recovery queue
+- item should reappear after roughly **3-5 new prompts**
+- current preferred v2 direction: **around 5 prompts later**
+
+### Card types
+Initial/early card types:
+- single word translation
+- short phrase translation
+- article + noun selection
+
+Agents must not casually add fancy task types that create ambiguity or scope inflation.
+
+---
+
+## 4. UX and design rules
+
+### No clone behavior
+Agents must not recreate copyrighted or brand-identical UI, names, board visuals, sounds, icons, motion language, or progression framing from existing commercial puzzle games.
+
+Genre inspiration is allowed.
+Asset mimicry is not.
+
+### Canonical run layout
+The gameplay screen should prioritize:
+1. header with score, hearts, streak
+2. question card
+3. board
+4. tray with 3 pieces
+
+### Desired feel
+- clean
+- warm
+- modern
+- readable
+- lightly playful
+- French in vibe, not in stereotype spam
+
+### Interaction rules
+- large tap targets
+- readable typography
+- fast transitions
+- short animations, roughly 120-220 ms
+- obvious state change between locked move and unlocked move
+- obvious correct / wrong / combo feedback
+- dark mode support
+- Telegram theme support
+
+### Frontend ergonomics
+Agents must optimize for Telegram mobile viewport.
+Do not design like the user is sitting at a 32-inch monitor with a gaming mouse and infinite patience.
+
+---
+
+## 5. Primary engineering principles
+
+### 5.1 Keep domain logic pure
 Core gameplay and learning logic must live in framework-agnostic modules.
 
 Examples:
 - board validation
 - line clear logic
 - score calculation
+- answer evaluation
 - mastery updates
-- answer evaluation rules
-- review scheduling rules
+- review scheduling
+- repetition queue timing
 
-These should not depend on:
+These must not depend directly on:
 - React
-- Telegram SDK UI concerns
-- browser globals unless explicitly wrapped
+- browser-only UI code
+- Telegram UI state
 - database clients
 
-### 2.2 Prefer explicit contracts
-Use typed schemas and runtime validation for all boundary inputs.
+### 5.2 Prefer explicit contracts
+Use typed schemas and runtime validation at every boundary.
 
 Examples:
 - API payloads
-- Telegram auth data
+- Telegram auth payloads
 - content imports
-- admin form submission
-- analytics event payloads
+- admin submissions
+- analytics events
 
-### 2.3 Product safety over cleverness
-Do not optimize for novelty if it reduces clarity.
-
-Bad:
-- magic abstractions
-- over-generalized game engine before the game exists
-- auto-generated content pipelines with weak QA
-- hidden side effects
-
-Good:
+### 5.3 Product safety over cleverness
+Prefer:
 - readable domain models
 - deterministic functions
-- traceable data flow
-- small composable modules
+- testable modules
+- explicit flow
 
-### 2.4 No clone behaviour
-Agents must not recreate copyrighted or brand-identical UI, names, icons, board visuals, sounds, or progression systems from existing puzzle games.
+Avoid:
+- mystery abstractions
+- accidental side effects
+- over-generalized engines before the game needs them
+- giant utility graveyards
 
-Genre inspiration is acceptable.
-Asset mimicry is not.
+### 5.4 MVP and v2 discipline
+Do not quietly add features because they “might be useful later”.
 
-### 2.5 MVP discipline
-If a feature is not needed for the MVP, do not quietly sneak it in “because it might help later”.
-
-That includes:
+Examples of forbidden quiet scope creep:
 - PvP
 - clans
 - chat
-- currencies beyond minimal XP/progression
-- real-money monetization plumbing
-- live multiplayer
-- speech recognition
-- advanced avatar systems
+- real-money economy plumbing
+- voice recognition
+- overbuilt avatar systems
+- full multi-level expansion before A1/A2 quality is proven
 
 ---
 
-## 3. Expected repository shape
+## 6. Repository responsibility boundaries
 
-Agents should assume a monorepo like this unless the repository has already evolved with an approved alternative:
+Agents should assume a monorepo like this unless the actual repo has an approved equivalent:
 
 ```text
 apps/
@@ -136,294 +222,150 @@ packages/
 
 ### Responsibility split
 - `apps/miniapp` - Telegram Mini App frontend
-- `apps/admin` - internal CMS / editorial interface
-- `apps/api` - backend API, auth, game sessions, content delivery
-- `packages/shared` - shared types, constants, validation helpers
+- `apps/admin` - editorial CMS and internal tools
+- `apps/api` - backend API, auth, sessions, persistence
+- `packages/shared` - shared types, DTOs, constants, validation helpers
 - `packages/game-engine` - deterministic gameplay logic
-- `packages/content-core` - content schemas, validation, import helpers
-- `packages/ui` - shared UI components, design tokens, layout primitives
+- `packages/content-core` - content schemas, import validation, learning rules
+- `packages/ui` - shared UI primitives and design tokens
 - `packages/analytics` - event definitions and tracking helpers
-- `packages/config` - lint, tsconfig, environment, shared build config
+- `packages/config` - shared tooling and config
 
-If the actual repo differs, agents should follow the **same responsibility boundaries**.
+If the actual repo differs, keep the same responsibility boundaries anyway.
 
 ---
 
-## 4. Agent roles
+## 7. Agent role expectations
 
-Agents should work as **specialists**, not as one chaotic omnipotent goblin editing everything at once.
+Agents should work as specialists, not as one chaotic goblin touching every layer at once.
 
-### 4.1 Product Architect Agent
+### Product Architect Agent
 Owns:
 - system design
-- package boundaries
-- sequencing
-- technical tradeoffs
+- boundaries
 - invariants
+- sequencing
+- contract safety
 
-Should produce:
-- architecture docs
-- sequence diagrams
-- task decomposition
-- interface contracts
-
-Should not:
-- mass-edit UI code for cosmetic reasons
-- rewrite stable modules without cause
-
-### 4.2 Mini App Frontend Agent
+### Mini App Frontend Agent
 Owns:
 - Telegram Mini App integration
-- React screens
-- session UX
-- onboarding
+- screens and interaction states
 - game HUD
-- animations and interaction polish
+- question card UX
+- animations and feedback polish
 
-Should prioritize:
-- responsiveness
-- mobile ergonomics
-- Telegram-safe layout
-- clear loading and error states
-
-Should not:
-- invent backend contracts
+Must not:
+- duplicate game engine logic in components
+- invent backend contracts from thin air
 - hardcode content that belongs in CMS
-- duplicate game logic from `game-engine`
 
-### 4.3 Backend Agent
+### Backend Agent
 Owns:
-- auth
-- session management
-- API routes
-- gameplay persistence
+- Telegram auth validation
+- sessions
+- game APIs
+- run persistence
 - anti-cheat baseline
 - review/mastery persistence
 - admin auth and permissions
 
-Should prioritize:
-- validation
-- idempotency where needed
-- clean service boundaries
-- migration safety
-
-Should not:
+Must not:
+- trust critical client-submitted state without verification
 - move business logic into controllers
-- trust client-submitted critical state without verification
 
-### 4.4 Game Engine Agent
+### Game Engine Agent
 Owns:
 - board model
 - piece model
 - placement validation
+- line clear logic
 - scoring
 - combo rules
-- run-end rules
+- run-end checks
 - deterministic seeds
 
-Should produce:
+Must produce:
 - pure functions
 - exhaustive tests
-- reproducible simulations
+- reproducible results
 
-Should not:
-- depend on React or database code
-- embed UI text
-- embed analytics side effects
-
-### 4.5 Content / Learning Logic Agent
+### Content and Learning Agent
 Owns:
-- vocabulary schema
+- vocab schemas
 - distractor rules
-- answer types
-- level mapping
+- answer logic
 - mastery logic
-- spaced review logic
+- repetition scheduling
 - placement test logic
 
-Should prioritize:
-- pedagogical correctness
-- editorial traceability
-- CEFR-informed organization
-- no ambiguous answer sets
+Must not:
+- claim a dataset is “the official CEFR list” unless that is explicitly documented and true
+- auto-publish uncertain content
 
-Should not:
-- assume one “official” universal CEFR vocabulary list exists
-- auto-publish AI-generated content without review status
-
-### 4.6 CMS / Admin Agent
+### CMS Agent
 Owns:
-- editorial dashboard
-- vocab item CRUD
-- lesson pack management
-- review queues for editors
-- publishing workflow
-- import/export
+- vocab CRUD
+- lesson tooling
+- bulk import
+- preview
+- review workflow
+- publish/archive flow
+- audit history
 
-Should prioritize:
-- clarity
-- bulk editing tools
-- data validation
-- auditability
-
-Should not:
-- bypass content statuses
-- allow direct publishing of invalid items
-
-### 4.7 Analytics Agent
+### Analytics Agent
 Owns:
 - event taxonomy
-- tracking helper library
-- event validation
-- dashboard-facing event naming consistency
+- typed tracking payloads
+- naming consistency
+- privacy-safe instrumentation
 
-Should prioritize:
-- stable event names
-- backwards compatibility where possible
-- privacy-respecting instrumentation
-
-Should not:
-- scatter raw event names all over the app
-- track personally unnecessary sensitive information
-
-### 4.8 QA / Test Agent
+### QA Agent
 Owns:
-- test plan
-- regression cases
+- regression coverage
 - smoke flows
 - edge case enumeration
-- content validation tests
-
-Should prioritize:
-- deterministic test cases
-- gameplay edge cases
-- auth failure paths
-- content integrity
-
-Should not:
-- approve code with untested core mechanics
+- content validation checks
 
 ---
 
-## 5. Critical invariants
+## 8. Critical invariants
 
-These are non-negotiable. Agents must not violate them.
+These are non-negotiable.
 
-### 5.1 Telegram auth must be server-validated
-Never trust Telegram `initData` only on the client.
+### 8.1 Telegram auth must be server-validated
+Never trust Telegram launch data only on the client.
 
-### 5.2 Core game state must be reproducible
-The same input state and seed must produce the same result.
+### 8.2 Game logic must be reproducible
+Same input state and seed must produce the same result.
 
-### 5.3 Learning content must be editorially controlled
+### 8.3 Learning items must be editorially controlled
 Every content item must have status and provenance.
 
-### 5.4 One question must have one correct answer in MVP
-Do not create ambiguous answer cards.
+### 8.4 One question must have one correct answer
+Especially in MVP and early v2.
+No ambiguous answer cards.
 
-### 5.5 Board logic must be UI-independent
-Frontend renders state. It does not define rules.
+### 8.5 Board logic must be UI-independent
+The frontend renders state.
+It does not define the rules.
 
-### 5.6 Content level mapping is product-defined, not mythical-official
-Agents must not falsely claim a dataset is “the official CEFR word list” unless that is explicitly true and documented.
+### 8.6 Russian UI is the default early product language
+Do not silently convert the app into an English UI project.
 
-### 5.7 Russian UI is the MVP default
-Do not silently switch product copy to English.
+### 8.7 Launch content quality beats content surface area
+A larger broken course is not progress.
 
-### 5.8 Launch scope is A1 + A2 only
-Agents may prepare extensibility for more levels, but not expand launch scope by default.
-
----
-
-## 6. Coding standards
-
-### 6.1 Language and stack
-- TypeScript end-to-end
-- strict mode enabled
-- ESLint + Prettier
-- shared validation schemas
-
-### 6.2 Style
-Prefer:
-- small functions
-- explicit names
-- flat data flow where practical
-- typed return values
-- domain-oriented naming
-
-Avoid:
-- giant utility dumping grounds
-- hidden mutation
-- unnecessary class hierarchies
-- premature plugin systems
-
-### 6.3 Comments
-Write comments only where they add value:
-- why, not what
-- invariants
-- edge case reasoning
-- external constraints
-
-Do not narrate obvious code.
-
-### 6.4 Error handling
-Errors must be:
-- typed or normalized where relevant
-- user-safe at the UI boundary
-- logged with enough context on the server
-
-Do not leak internal stack details into user-facing messages.
-
-### 6.5 Validation
-Use shared schemas for runtime boundaries.
-Typical candidates:
-- zod
-- valibot
-- equivalent approved validation tool
-
-### 6.6 Config and secrets
-Never hardcode secrets.
-All env usage should be centralized and validated.
+### 8.8 Wrong answers must contribute to learning recovery
+A wrong answer is not just damage.
+It must feed review logic.
 
 ---
 
-## 7. Database and migration rules
+## 9. Content rules
 
-Agents working on persistence must follow these rules.
-
-### 7.1 Migration safety
-Every schema change must include:
-- a migration
-- rollback consideration
-- updated types
-- updated seed or fixtures if needed
-
-### 7.2 Content entities must support workflow status
-At minimum, vocab/content entities should support states like:
-- draft
-- on_review
-- approved
-- archived
-
-### 7.3 Auditability
-Important admin mutations should be traceable.
-Where reasonable, store:
-- created_by
-- updated_by
-- published_by
-- published_at
-
-### 7.4 Do not over-normalize too early
-Use sane relational structure, but do not design a PhD thesis when the product only needs clean CRUD and validated delivery.
-
----
-
-## 8. Content rules for agents
-
-This project contains educational content. Agents must treat it carefully.
-
-### 8.1 Required item shape
-A vocab or learning item should generally support fields like:
+### Required semantic fields
+A vocab item should generally support:
 - `id`
 - `lemma`
 - `surfaceForm`
@@ -444,230 +386,197 @@ A vocab or learning item should generally support fields like:
 - `status`
 - `editorNotes`
 
-Naming can follow repo conventions, but semantic coverage should remain.
+Naming can follow repo conventions, but the semantic coverage should remain.
 
-### 8.2 Distractor policy
+### Distractor policy
 Distractors must be:
 - plausible
 - same part of speech where possible
-- close in difficulty
+- similar difficulty
 - not accidentally correct
 - grammatically compatible with the prompt format
 
-### 8.3 Noun handling
-French nouns must properly handle:
+### Noun handling
+French nouns must support:
 - article
 - gender
-- countability as relevant
+- prompt compatibility
 
-Do not flatten everything into naked lemmas when article knowledge matters.
+Do not flatten meaningful noun learning into raw naked lemmas when the teaching goal includes article knowledge.
 
-### 8.4 Verb handling
-Do not mix raw infinitive prompts and conjugation prompts without explicit task type.
+### Verb handling
+Do not mix infinitive, conjugation, and usage-in-context prompts without explicit task typing.
 
-### 8.5 Editorial truth over model confidence
+### Editorial truth over agent confidence
 If content is uncertain, mark it for review.
-Do not present guesses as cleanly validated pedagogical truth.
-
----
-
-## 9. UX rules for agents
-
-### 9.1 Telegram-first ergonomics
-The Mini App must feel native inside Telegram:
-- fast load
-- touch-friendly layout
-- clear safe area handling
-- stable tap targets
-- no hover-dependent interactions
-
-### 9.2 Visual direction
-Desired feel:
-- clean
-- warm
-- modern
-- readable
-- lightly playful
-- French-inspired without visual clichés
-
-### 9.3 Gameplay screen priorities
-The gameplay screen should emphasize:
-1. score / hearts / streak
-2. question card
-3. board
-4. piece tray
-
-### 9.4 Performance matters
-Animations should be snappy and not block interaction.
-Do not ship performance-heavy effects that hurt low-end devices.
+Do not bluff pedagogical certainty.
 
 ---
 
 ## 10. Analytics rules
 
-Analytics must be planned, not sprinkled like confetti.
+Analytics must be centralized, typed, and boring in a good way.
 
-### 10.1 Event naming
-Use centralized event constants and typed payloads.
+### Event naming
+Use shared constants and validated payloads.
+Do not scatter raw event strings all over the codebase like confetti at a cheap wedding.
 
-### 10.2 Core MVP events
+### Core events
 At minimum, support events like:
-- app_opened
-- auth_success
-- onboarding_started
-- placement_test_started
-- placement_test_completed
-- level_selected
-- run_started
-- question_shown
-- answer_submitted
-- answer_correct
-- answer_wrong
-- piece_placed
-- line_cleared
-- run_failed
-- run_completed
-- review_session_started
-- review_item_answered
-- cms_item_published
+- `app_opened`
+- `auth_success`
+- `onboarding_started`
+- `placement_test_started`
+- `placement_test_completed`
+- `level_selected`
+- `run_started`
+- `question_shown`
+- `answer_submitted`
+- `answer_correct`
+- `answer_wrong`
+- `piece_placed`
+- `line_cleared`
+- `run_failed`
+- `run_completed`
+- `review_session_started`
+- `review_item_answered`
+- `cms_item_published`
 
-### 10.3 Privacy
-Do not collect unnecessary personal data.
-Track product behaviour, not user creepiness.
+### Privacy
+Do not track unnecessary personal data.
+Track product behavior, not weird voyeuristic trivia.
 
 ---
 
 ## 11. Testing rules
 
-### 11.1 Core logic must be covered first
-Top priority tests:
+### Core logic gets tested first
+Top priority:
 - board placement validation
 - line clearing
 - scoring
-- combo updates
-- run end detection
+- combo rules
+- run-end detection
 - answer evaluation
-- mastery state transitions
+- repetition queue timing
+- mastery transitions
 - placement test scoring
 
-### 11.2 Minimum test layers
-Agents should aim for:
+### Minimum test layers
+Aim for:
 - unit tests for domain logic
 - integration tests for API contracts
 - smoke tests for major frontend flows
 
-### 11.3 Edge cases to test
+### Edge cases to cover
 Examples:
 - impossible piece placements
 - last-heart failure
 - repeated wrong answers
-- ambiguous distractor set rejection
+- duplicate resurfacing bug in repetition queue
+- ambiguous distractor rejection
 - tampered Telegram auth payload
 - stale session refresh
 - invalid content status transitions
 
-### 11.4 Do not mark work done without tests
-Especially for:
-- auth
-- engine
-- learning logic
-- migrations
+### Done means tested
+Do not mark critical logic done if the code only “looks right”.
+That is how bugs get dressed up as confidence.
 
 ---
 
 ## 12. Change policy
 
-Agents must keep changes scoped.
-
-### 12.1 Before editing
+### Before editing
 The agent should identify:
 - goal
-- modules affected
+- affected modules
+- contract impact
 - risk level
-- whether the change touches contracts or only internals
+- whether the change is product, infra, or refactor work
 
-### 12.2 Allowed broad changes
-Broad refactors are allowed only if one of these is true:
-- current code is blocking implementation
-- there is major duplication in a critical path
-- the refactor is necessary for correctness
-- the refactor has test coverage or is bundled with it
+### Allowed broad changes
+Broad refactors are allowed only if:
+- current structure blocks implementation
+- duplication is severe in a critical path
+- correctness requires it
+- tests cover it or are added with it
 
-### 12.3 Avoid drive-by refactors
-Do not rewrite unrelated files “while you’re there”.
-That is how nice weekends die.
+### Avoid drive-by refactors
+Do not rewrite unrelated files because you were “already in there”.
+That is how neat intentions become archaeological debris.
 
-### 12.4 Preserve public contracts when possible
-If you change:
-- API route shape
-- shared schema
+### Preserve public contracts when possible
+If changing:
+- API shapes
+- shared schemas
 - event payloads
 - DB fields
+- gameplay defaults that other modules rely on
 
 then also update:
 - docs
 - tests
 - consumers
-- migration notes
+- migration notes where relevant
 
 ---
 
 ## 13. Definition of Done
 
-A task is done only if most of these apply:
-- implementation is complete
-- typing is correct
-- tests exist or are updated
+A task is done only if most of these are true:
+- implementation complete
+- typing correct
+- tests added or updated
 - lint passes
 - build passes
-- docs are updated if public contract changed
-- no known broken flows were introduced
-- no hidden TODOs for critical paths remain
+- docs updated if contracts changed
+- no known broken core flows introduced
+- no hidden critical TODOs left behind
 
-For product-sensitive areas, also ensure:
-- content logic is unambiguous
-- UI copy is coherent in Russian
-- event tracking is included if relevant
+For product-sensitive areas also confirm:
+- content is unambiguous
+- Russian UI copy is coherent
+- relevant analytics are included
 - error states are handled
+- gameplay defaults still match docs
 
 ---
 
-## 14. Recommended execution order for agents
+## 14. Recommended execution order
 
-When building from near-zero, agents should work in this order:
+When building or extending from near-zero, work in this order:
+1. architecture and repo bootstrap
+2. Telegram auth and session layer
+3. core game engine
+4. content schema and editorial workflow basics
+5. answer evaluation and mastery logic
+6. Mini App onboarding and shell screens
+7. Classic Run integration
+8. repetition and review systems
+9. CMS improvements
+10. analytics hardening
+11. QA and polish
 
-1. **Architecture + repo bootstrap**
-2. **Telegram auth + session layer**
-3. **Core game engine**
-4. **Content schema + editorial workflow basics**
-5. **Answer evaluation + mastery domain**
-6. **Mini App onboarding and shell screens**
-7. **Classic Run screen integration**
-8. **Review queue**
-9. **Admin CMS**
-10. **Analytics hardening**
-11. **QA pass + polish**
-
-This is intentional.
-Do not start by polishing shadows on buttons before auth, engine, and content contracts exist.
+Do not start by polishing shadows on buttons while auth, engine, and content contracts are still half-invented.
 
 ---
 
-## 15. Task decomposition template for agents
+## 15. Task decomposition template
 
-When taking a task, agents should structure work like this:
+When taking a task, agents should frame it like this:
 
 ### Task
-Clear one-sentence goal.
+One-sentence objective.
 
 ### Inputs
-Files, modules, constraints, and contracts involved.
+Files, modules, constraints, contracts.
 
 ### Outputs
-Exact code, tests, docs, or migrations expected.
+Code, tests, docs, migrations, or UI states expected.
 
 ### Risks
-What could break.
+What can break.
 
 ### Steps
 Ordered implementation plan.
@@ -683,118 +592,55 @@ Task: Implement deterministic piece placement validation in packages/game-engine
 Inputs:
 - board model
 - piece model
-- existing score rules
+- current run rules
 
 Outputs:
 - placement validator
-- tests for valid/invalid placements
-- serialization-safe state helper
+- applyPlacement helper
+- tests for valid and invalid placements
 
 Risks:
-- off-by-one board indexing
-- mismatch between frontend preview and engine logic
+- off-by-one indexing
+- mismatch with frontend preview state
 
 Steps:
-1. Add board and cell types
+1. Define stable board and cell types
 2. Implement pure placement check
-3. Add applyPlacement helper
+3. Implement applyPlacement helper
 4. Add tests for edges and overlaps
-5. Export stable API from package entry
+5. Export stable package API
 
 Validation:
 - unit tests pass
-- identical state produces identical result
+- same state produces same result
 ```
 
 ---
 
-## 16. What agents must never do
+## 16. Never do this
 
-### Never do this
+Agents must never:
 - claim content is officially CEFR-certified when it is not
-- clone a commercial puzzle game’s identity
+- clone another puzzle game's identity
 - bypass server validation for Telegram auth
 - trust client score submissions blindly
-- hardcode untranslated product copy all over the app
 - publish ambiguous learning items
-- introduce large dependencies without reason
+- hardcode product copy everywhere without structure
+- add giant dependencies without strong reason
 - rewrite stable modules for style points
-- expand MVP scope without explicit approval
+- expand scope because enthusiasm temporarily outpaced judgment
 
-### Also never do this sneaky nonsense
-- leave broken tests with a note saying “fix later” on core paths
-- add “temporary” admin bypasses that will obviously survive into production
-- split obvious business logic between client and server inconsistently
-- bury event names as raw strings in random components
+And definitely do not leave broken critical tests with a note that basically says, “future me can suffer”.
 
 ---
 
-## 17. Good prompts for coding agents
+## 17. Final operating rule
 
-These prompt patterns are recommended when delegating work to Codex or another code agent.
-
-### Prompt template: implementation
-
-```md
-You are working inside the French Learning Mini App monorepo.
-Read AGENTS.md, README.md, and plan.md first.
-
-Task:
-Implement [specific task].
-
-Constraints:
-- keep domain logic pure
-- use existing package boundaries
-- do not expand MVP scope
-- add tests for core logic
-- update docs if public contracts change
-
-Deliver:
-1. code changes
-2. tests
-3. short summary of what changed
-4. any follow-up risks or TODOs
-```
-
-### Prompt template: review
-
-```md
-Review the current implementation against AGENTS.md.
-Focus on:
-- correctness
-- scope discipline
-- contract safety
-- test coverage
-- maintainability
-
-Return:
-- critical issues
-- medium issues
-- low-priority improvements
-- exact files affected
-```
-
-### Prompt template: content tooling
-
-```md
-Implement content import validation for vocab items.
-Requirements:
-- reject missing required fields
-- reject ambiguous distractors
-- support content statuses
-- produce actionable validation errors for editors
-- add tests
-```
-
----
-
-## 18. Final operating rule
-
-When in doubt, agents should prefer:
+When in doubt, prefer:
 - clearer over cleverer
 - deterministic over magical
 - scoped over sprawling
 - editorial control over content roulette
 - maintainable velocity over fake speed
 
-Build it so a human team can actually run this product after the first burst of enthusiasm wears off.
+Build it so a human team can still operate the product after the first burst of excitement wears off.
