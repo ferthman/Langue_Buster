@@ -32,9 +32,7 @@ export function createMasteryController(
     verifyPlayerAccess?(authorizationHeader: string | undefined): Promise<import('@langue-buster/shared').SessionVerificationResponse>;
   } = {},
 ) {
-  const verifyPlayerAccess = options.verifyPlayerAccess
-    ? (authorizationHeader: string | undefined) => options.verifyPlayerAccess?.(authorizationHeader)
-    : undefined;
+  const verifyPlayerAccess = options.verifyPlayerAccess;
   return {
     async handleGetQueue(query: unknown, authorizationHeader: string | undefined): Promise<MasteryHttpResult> {
       try {

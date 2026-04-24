@@ -45,9 +45,7 @@ export function createRunController(
     verifyPlayerAccess?(authorizationHeader: string | undefined): Promise<import('@langue-buster/shared').SessionVerificationResponse>;
   } = {},
 ) {
-  const verifyPlayerAccess = options.verifyPlayerAccess
-    ? (authorizationHeader: string | undefined) => options.verifyPlayerAccess?.(authorizationHeader)
-    : undefined;
+  const verifyPlayerAccess = options.verifyPlayerAccess;
   return {
     async handleStart(body: unknown, authorizationHeader: string | undefined): Promise<RunHttpResult> {
       try {
