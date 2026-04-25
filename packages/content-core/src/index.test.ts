@@ -105,6 +105,7 @@ describe('phase 6 answer generation', () => {
     expect(questionCardTypeSchema.parse(question.cardType)).toBe('single_word_translation');
     expect(question.promptText).toBe('яблоко');
     expect(question.meta.distractorSource).toBe('linked_set');
+    expect(question.options).toHaveLength(3);
     expect(question.options.filter((option) => option.isCorrect)).toHaveLength(1);
     expect(question.correctOptionId).toBe('correct');
     expect(new Set(question.options.map((option) => option.label.toLowerCase()))).toHaveLength(question.options.length);
@@ -131,7 +132,7 @@ describe('phase 6 answer generation', () => {
     expect(first).toEqual(second);
     expect(first.cardType).toBe('phrase_translation');
     expect(first.meta.distractorSource).toBe('fallback_pool');
-    expect(first.options).toHaveLength(4);
+    expect(first.options).toHaveLength(3);
     expect(first.options.every((option) => option.linkedItemId?.startsWith('vocab.phrase.'))).toBe(true);
   });
 
@@ -219,7 +220,7 @@ describe('question option validation', () => {
 
     expect(selection.distractorSource).toBe('fallback_pool');
     expect(selection.options.filter((option) => option.linkedItemId === 'vocab.food.apple')).toHaveLength(1);
-    expect(selection.options).toHaveLength(4);
+    expect(selection.options).toHaveLength(3);
   });
 });
 

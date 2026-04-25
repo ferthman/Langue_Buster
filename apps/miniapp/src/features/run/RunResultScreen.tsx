@@ -23,13 +23,20 @@ export function RunResultScreen() {
   const location = useLocation();
   const auth = useAuth();
   const preferences = usePreferences();
+  const initialState = location.state as ResultLocationState;
   const [result, setResult] = useState<RunResult | null>(() => {
-    const state = location.state as ResultLocationState;
-    if (!state) {
+    if (!initialState) {
       return null;
     }
 
-    return 'result' in state && state.result ? state.result : null;
+    return 'result' in initialState && initialState.result ? initialState.result : null;
+  });
+  const [runSnapshot] = useState<RunSession | null>(() => {
+    if (!initialState || !('run' in initialState) || !initialState.run) {
+      return null;
+    }
+
+    return initialState.run;
   });
   const [loading, setLoading] = useState(result === null);
   const [error, setError] = useState<string | null>(null);
@@ -93,25 +100,41 @@ export function RunResultScreen() {
   }
 
   return (
-    <main className="screen">
-      <section className="hero-card">
+    <main className="screen result-screen">
+      <section className="hero-card result-hero">
         <p className="eyebrow">Итоги рана</p>
         <h1>{result.status === 'completed' ? 'Ран завершён' : result.status === 'failed' ? 'Ран остановлен' : 'Ран закрыт'}</h1>
         <p className="body-copy">
-          Финальная сводка приходит с сервера без клиентских пересчётов. Ошибки уже учтены в повторении и mastery-пайплайне.
+          Сервер уже пересчитал итог без клиентских допущений. Ошибки отправлены в контур повторения, а результат готов к следующему заходу.
         </p>
+        <div className="result-hero__score">{result.finalScore}</div>
       </section>
 
-      <section className="panel">
+      <section className="result-grid">
+        <article className="result-stat-card">
+          <span>Точность</span>
+          <strong>{formatAccuracy(result.correctCount, result.wrongCount)}</strong>
+        </article>
+        <article className="result-stat-card">
+          <span>Линии</span>
+          <strong>{result.clearedLinesTotal}</strong>
+        </article>
+        <article className="result-stat-card">
+          <span>Ошибки</span>
+          <strong>{result.wrongCount}</strong>
+        </article>
+        <article className="result-stat-card">
+          <span>Длительность</span>
+          <strong>{Math.max(1, Math.round(result.durationMs / 1000))} сек</strong>
+        </article>
+      </section>
+
+      <section className="panel result-panel">
+        <div className="panel-header">
+          <h2>Разбор попытки</h2>
+          <span>{translateStatus(result.status)}</span>
+        </div>
         <dl className="stats-list">
-          <div>
-            <dt>Счёт</dt>
-            <dd>{result.finalScore}</dd>
-          </div>
-          <div>
-            <dt>Линий очищено</dt>
-            <dd>{result.clearedLinesTotal}</dd>
-          </div>
           <div>
             <dt>Верных ответов</dt>
             <dd>{result.correctCount}</dd>
@@ -121,22 +144,40 @@ export function RunResultScreen() {
             <dd>{result.wrongCount}</dd>
           </div>
           <div>
-            <dt>Статус</dt>
-            <dd>{translateStatus(result.status)}</dd>
+            <dt>Уровень</dt>
+            <dd>{result.levelId}</dd>
           </div>
           <div>
-            <dt>Длительность</dt>
-            <dd>{Math.max(1, Math.round(result.durationMs / 1000))} сек</dd>
+            <dt>Слова в коротком повторе</dt>
+            <dd>{runSnapshot?.recoveryState?.pending.length ?? 0}</dd>
           </div>
         </dl>
+        <p className="body-copy result-panel__copy">
+          {describePerformance(result.correctCount, result.wrongCount, result.clearedLinesTotal)}
+        </p>
       </section>
 
-      <div className="button-row">
-        <button type="button" className="primary-button" onClick={() => { void navigate('/home'); }}>
-          Вернуться домой
+      <section className="panel result-panel">
+        <div className="panel-header">
+          <h2>Что делать дальше</h2>
+          <span>Следующий шаг</span>
+        </div>
+        <ul className="feature-list">
+          <li>Повтор сейчас: откройте очередь повторения, чтобы сразу закрыть слабые элементы.</li>
+          <li>Новый ран: идите ещё раз, если хотите удержать темп и добрать очки.</li>
+          <li>Фокус уровня можно сменить на карте прогресса без нового онбординга.</li>
+        </ul>
+      </section>
+
+      <div className="button-row result-actions">
+        <button type="button" className="primary-button" onClick={() => { void navigate('/review'); }}>
+          Открыть повторение
         </button>
         <button type="button" className="secondary-button" onClick={() => { void navigate('/home'); }}>
-          Начать новый ран
+          Новый ран
+        </button>
+        <button type="button" className="secondary-button" onClick={() => { void navigate('/home'); }}>
+          На главный экран
         </button>
       </div>
     </main>
@@ -154,4 +195,28 @@ function translateStatus(status: RunResult['status']) {
     return 'Остановлен';
   }
   return status;
+}
+
+function formatAccuracy(correctCount: number, wrongCount: number) {
+  const total = correctCount + wrongCount;
+  if (total === 0) {
+    return '0%';
+  }
+
+  return `${Math.round((correctCount / total) * 100)}%`;
+}
+
+function describePerformance(correctCount: number, wrongCount: number, clearedLinesTotal: number) {
+  const total = correctCount + wrongCount;
+  const accuracy = total === 0 ? 0 : correctCount / total;
+
+  if (accuracy >= 0.85 && clearedLinesTotal >= 3) {
+    return 'Сильная попытка: и язык, и поле держались уверенно. Такой ран уже хорошо конвертируется в запоминание.';
+  }
+
+  if (wrongCount > correctCount) {
+    return 'Ошибок было больше, чем стабильных ответов. Лучше сразу открыть повторение и вернуть слабые слова в короткий цикл.';
+  }
+
+  return 'Ран держался ровно: база уже есть, а короткое повторение поможет закрепить промахи без лишней перегрузки.';
 }

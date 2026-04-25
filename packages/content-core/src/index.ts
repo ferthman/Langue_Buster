@@ -13,6 +13,7 @@ export * from './short-cycle-recovery.js';
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DEFAULT_GENERATOR_VERSION = 'phase6-v1';
+const GENERATED_OPTION_COUNT = 3;
 
 export class ContentAnswerError extends Error {
   readonly code:
@@ -630,22 +631,25 @@ export function selectDistractorOptions(input: Readonly<{
   );
 
   if (linkedSet) {
-    const options = linkedSet.options.map((option) => ({
+    const linkedOptions = linkedSet.options.map((option) => ({
       id: option.id,
       label: option.label,
       isCorrect: option.isCorrect,
       linkedItemId: option.linkedItemId,
     }));
-    validateQuestionOptions(options);
+    validateQuestionOptions(linkedOptions);
 
-    return {
-      options,
-      distractorSource: 'linked_set',
-      debug: {
-        linkedDistractorSetId: linkedSet.id,
-        generatorVersion,
-      },
-    };
+    const selectedLinkedOptions = selectFixedQuestionOptions(linkedOptions);
+    if (selectedLinkedOptions) {
+      return {
+        options: selectedLinkedOptions,
+        distractorSource: 'linked_set',
+        debug: {
+          linkedDistractorSetId: linkedSet.id,
+          generatorVersion,
+        },
+      };
+    }
   }
 
   const correctLabel = buildAnswerLabel(input.sourceItem, cardType, input.answerLanguage);
@@ -675,13 +679,12 @@ export function selectDistractorOptions(input: Readonly<{
     });
     usedLabels.add(normalizedLabel);
 
-    if (distractors.length === 3) {
+    if (distractors.length === GENERATED_OPTION_COUNT - 1) {
       break;
     }
   }
 
-  const desiredOptionCount = distractors.length >= 3 ? 4 : distractors.length >= 2 ? 3 : 0;
-  if (desiredOptionCount === 0) {
+  if (distractors.length < GENERATED_OPTION_COUNT - 1) {
     throw new ContentAnswerError(
       'insufficient_distractors',
       `Could not generate enough distractors for source item "${input.sourceItem.id}".`,
@@ -695,7 +698,7 @@ export function selectDistractorOptions(input: Readonly<{
       isCorrect: true,
       linkedItemId: input.sourceItem.id,
     },
-    ...distractors.slice(0, desiredOptionCount - 1),
+    ...distractors.slice(0, GENERATED_OPTION_COUNT - 1),
   ].sort((left, right) => left.label.localeCompare(right.label, 'fr'));
 
   validateQuestionOptions(options);
@@ -833,8 +836,8 @@ export function createQuestionCardPreview(
   const prompt = input.promptLanguage === 'ru' ? 'яблоко' : 'pomme';
   const correct = input.answerLanguage === 'fr' ? 'la pomme' : 'яблоко';
   const distractors = input.answerLanguage === 'fr'
-    ? ['la poire', 'la banane', "l'orange"]
-    : ['груша', 'банан', 'апельсин'];
+    ? ['la poire', 'la banane']
+    : ['груша', 'банан'];
 
   return questionCardPreviewSchema.parse({
     prompt,
@@ -1033,6 +1036,24 @@ function resolveTimingMs(shownAt?: string, answeredAt?: string): number | undefi
 
 function normalizeOptionLabel(label: string): string {
   return label.trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr');
+}
+
+function selectFixedQuestionOptions(options: readonly QuestionOption[]): readonly QuestionOption[] | null {
+  const correctOption = options.find((option) => option.isCorrect);
+  if (!correctOption) {
+    return null;
+  }
+
+  const distractors = options.filter((option) => !option.isCorrect);
+  if (distractors.length < GENERATED_OPTION_COUNT - 1) {
+    return null;
+  }
+
+  const selectedDistractorIds = new Set(
+    distractors.slice(0, GENERATED_OPTION_COUNT - 1).map((option) => option.id),
+  );
+
+  return options.filter((option) => option.id === correctOption.id || selectedDistractorIds.has(option.id));
 }
 
 function uniqueStrings(values: readonly string[]): string[] {

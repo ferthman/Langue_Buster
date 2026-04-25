@@ -16,7 +16,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { usePreferences } from '../preferences/PreferencesProvider';
 import { useTelegram } from '../telegram/TelegramProvider';
 import { FullscreenState } from '../shell/StateScreens';
-import { FeedbackCard, MoveSummary, QuestionCard, RunHeader, RunPlayfield } from './components';
+import { FeedbackCard, MoveSummary, PauseOverlay, RunHeader, RunPlayfield, RunPromptCard } from './components';
 
 export function RunScreen() {
   const { runId = '' } = useParams();
@@ -29,7 +29,9 @@ export function RunScreen() {
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error' | 'info'; title: string; description: string } | null>(null);
   const [moveEvent, setMoveEvent] = useState<MoveEvent | null>(null);
   const [pending, setPending] = useState(true);
+  const [pauseOpen, setPauseOpen] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
+  const [wrongOptionId, setWrongOptionId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const token = auth.status === 'authenticated' ? auth.token : null;
   const locationState = location.state as { result?: RunResult } | null;
@@ -57,6 +59,7 @@ export function RunScreen() {
 
       setRun(response.run);
       setSelectedOptionId(response.run.currentQuestionState?.selectedOptionId);
+      setWrongOptionId(undefined);
     } catch (loadError) {
       setError(describeError(loadError));
       if (auth.status === 'authenticated') {
@@ -122,17 +125,18 @@ export function RunScreen() {
       });
       setRun(response.run);
       setMoveEvent(null);
+      setWrongOptionId(undefined);
 
       if (response.evaluation.isCorrect) {
         telegram.notify('success');
         setFeedback({
           tone: 'success',
           title: 'Верно',
-          description: 'Ход открыт. Перетащите любую фигуру прямо на поле: превью покажет валидную постановку до отпускания.',
+          description: 'Правильный слот активирован. Теперь перетащите именно эту фигуру прямо на поле.',
         });
       } else {
         telegram.notify('error');
-        setSelectedOptionId(undefined);
+        setWrongOptionId(option.id);
         setFeedback({
           tone: 'error',
           title: 'Неверно',
@@ -140,6 +144,13 @@ export function RunScreen() {
             ? `Сердца: ${response.run.heartsRemaining}. Слово уйдёт в короткое повторение и вернётся примерно через ${CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP} новых карточек.`
             : 'Попробуйте следующую карточку.',
         });
+
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 260);
+        });
+        setWrongOptionId(undefined);
+        setSelectedOptionId(undefined);
+        setRun(response.run);
       }
 
       if (response.result) {
@@ -189,6 +200,7 @@ export function RunScreen() {
       telegram.notify('success');
       setRun(response.run);
       setMoveEvent(response.moveEvent);
+      setWrongOptionId(undefined);
       setSelectedOptionId(undefined);
       setFeedback({
         tone: 'success',
@@ -301,6 +313,9 @@ export function RunScreen() {
 
   const answerLocked = run.status !== 'active' || run.currentQuestionState?.answerState !== 'awaiting_answer';
   const moveUnlocked = run.status === 'awaiting_move';
+  const activeTrayIndex = moveUnlocked
+    ? question.options.findIndex((option) => option.id === (run.currentQuestionState?.selectedOptionId ?? selectedOptionId))
+    : -1;
 
   return (
     <main className="screen run-screen">
@@ -311,23 +326,27 @@ export function RunScreen() {
         level={run.levelId}
         turn={run.engineState.turn + 1}
         pending={pending}
-        onFinish={() => { void handleFinish(); }}
+        onOpenMenu={() => { setPauseOpen(true); }}
       />
 
       {feedback ? <FeedbackCard {...feedback} /> : null}
       {error ? <FeedbackCard tone="error" title="Нужна синхронизация" description={error} /> : null}
 
-      <QuestionCard
+      <RunPromptCard
         question={question}
-        answerLocked={answerLocked}
+        moveUnlocked={moveUnlocked}
         pending={pending}
-        selectedOptionId={selectedOptionId}
-        onSelect={(option) => void handleAnswer(option)}
       />
 
       <RunPlayfield
         engineState={run.engineState}
+        question={question}
+        answerLocked={answerLocked}
+        activeTrayIndex={activeTrayIndex >= 0 ? activeTrayIndex : null}
         moveUnlocked={moveUnlocked && !pending}
+        selectedOptionId={selectedOptionId}
+        wrongOptionId={wrongOptionId}
+        onSelectOption={(option) => void handleAnswer(option)}
         onInteract={(effect) => {
           if (effect === 'lift') {
             telegram.impact('light');
@@ -346,6 +365,21 @@ export function RunScreen() {
       />
 
       {moveEvent ? <MoveSummary moveEvent={moveEvent} /> : null}
+
+      {pauseOpen ? (
+        <PauseOverlay
+          level={run.levelId}
+          onResume={() => { setPauseOpen(false); }}
+          onFinish={() => {
+            setPauseOpen(false);
+            void handleFinish();
+          }}
+          onGoHome={() => {
+            setPauseOpen(false);
+            void navigate('/home');
+          }}
+        />
+      ) : null}
     </main>
   );
 }

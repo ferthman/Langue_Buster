@@ -49,7 +49,7 @@ Supported or planned prompt directions include:
 #### v2.0 after MVP
 - 5-heart balancing pass
 - explicit short-cycle repetition in-run
-- question card UX upgrade
+- prompt-and-tray answer UX upgrade
 - progression and return-behavior systems
 - content cleanup and scale-up
 - B1 preparation in controlled scope
@@ -70,14 +70,16 @@ Agents must not drift from these rules unless the docs are explicitly updated.
 
 ### Board and session
 - board size: **8x8**
-- tray size: **3 pieces**
-- new set appears after all 3 pieces are used
+- tray size: **3 answer-piece slots**
+- each tray slot pairs one piece with one answer option
+- a fresh set appears after each successful placement
 - a move must be validated by deterministic engine logic
 
 ### Move gating
 - every move requires answering a language question correctly
-- default answer format is **4 options** with exactly **1 correct answer**
-- correct answer unlocks placement
+- run answer format is **3 tray options** with exactly **1 correct answer**
+- the prompt lives at the top and the answer options live in the tray
+- correct tray selection unlocks only the matching piece for drag-and-drop
 - wrong answer applies penalty and affects learning recovery state
 
 ### Run end conditions
@@ -116,9 +118,9 @@ Asset mimicry is not.
 ### Canonical run layout
 The gameplay screen should prioritize:
 1. header with score, hearts, streak
-2. question card
+2. prompt card with the source word
 3. board
-4. tray with 3 pieces
+4. tray with 3 answer-piece slots
 
 ### Desired feel
 - clean
@@ -252,7 +254,7 @@ Owns:
 - Telegram Mini App integration
 - screens and interaction states
 - game HUD
-- question card UX
+- prompt and tray answer UX
 - animations and feedback polish
 
 Must not:

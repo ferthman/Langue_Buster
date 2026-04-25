@@ -9,13 +9,13 @@ import { usePreferences } from '../preferences/PreferencesProvider';
 const levels: Array<{ id: LaunchLevelId; title: string; description: string }> = [
   {
     id: 'A1',
-    title: 'A1 · Рекомендуется для старта',
-    description: 'Если французский только запускается в памяти, начните здесь.',
+    title: 'A1 · Мягкий старт',
+    description: 'Подходит, если вы только входите в ритм и хотите собрать базовые слова без лишнего давления.',
   },
   {
     id: 'A2',
-    title: 'A2 · Если база уже есть',
-    description: 'Подходит, если вы уверенно держите простые слова и бытовые фразы.',
+    title: 'A2 · Уверенная база',
+    description: 'Для тех, кто уже держит простые фразы и готов к более плотному темпу вопросов.',
   },
 ];
 
@@ -41,41 +41,67 @@ export function PlacementScreen() {
   }, [auth, focusLevel, token]);
 
   return (
-    <main className="screen">
-      <section className="hero-card">
-        <p className="eyebrow">Placement</p>
+    <main className="screen placement-screen">
+      <section className="hero-card placement-hero">
+        <p className="eyebrow">Выбор фокуса</p>
         <h1>Выберите стартовый уровень</h1>
-        <p className="body-copy">Пока это лёгкий выбор между A1 и A2. Позже сюда можно встроить полноценный placement test.</p>
+        <p className="body-copy">
+          Для запуска доступны два режима входа: спокойный старт и более плотная база. Позже сюда можно добавить полноценный входной тест.
+        </p>
+        <div className="placement-hero__meta">
+          <span className="placement-pill placement-pill--accent">MVP: только A1 и A2</span>
+          <span className="placement-pill">Фокус можно сменить позже</span>
+        </div>
       </section>
 
-      {levels.map((level) => (
-        <button
-          key={level.id}
-          type="button"
-          className={selectedLevel === level.id ? 'choice-card is-selected' : 'choice-card'}
-          onClick={() => {
-            setSelectedLevel(level.id);
-            void trackAnalyticsEvent(token, {
-              eventName: 'level_selected',
-              occurredAt: new Date().toISOString(),
-              userId: auth.status === 'authenticated' ? auth.user.id : undefined,
-              sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
-              levelId: level.id,
-              payload: {
-                selectedLevelId: level.id,
-                route: '/placement',
-              },
-            });
-          }}
-        >
-          <strong>{level.title}</strong>
-          <span>{level.description}</span>
-        </button>
-      ))}
+      <div className="placement-grid">
+        {levels.map((level) => {
+          const isSelected = selectedLevel === level.id;
+
+          return (
+            <button
+              key={level.id}
+              type="button"
+              className={`choice-card placement-card${isSelected ? ' is-selected' : ''}`}
+              onClick={() => {
+                setSelectedLevel(level.id);
+                void trackAnalyticsEvent(token, {
+                  eventName: 'level_selected',
+                  occurredAt: new Date().toISOString(),
+                  userId: auth.status === 'authenticated' ? auth.user.id : undefined,
+                  sessionId: auth.status === 'authenticated' ? auth.session.id : undefined,
+                  levelId: level.id,
+                  payload: {
+                    selectedLevelId: level.id,
+                    route: '/placement',
+                  },
+                });
+              }}
+            >
+              <div className="placement-card__top">
+                <span className="placement-card__id">{level.id}</span>
+                <span className={`placement-pill${isSelected ? ' placement-pill--accent' : ''}`}>
+                  {isSelected ? 'Выбрано' : level.id === 'A1' ? 'Рекомендуем' : 'Бодрый темп'}
+                </span>
+              </div>
+              <strong>{level.title}</strong>
+              <span>{level.description}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <section className="panel placement-lock-panel">
+        <div className="panel-header">
+          <h2>Следующие уровни</h2>
+          <span>Скоро</span>
+        </div>
+        <p className="body-copy">B1 и выше появятся позже, после полировки стартовой петли A1/A2 и баланса коротких повторов.</p>
+      </section>
 
       <button
         type="button"
-        className="primary-button"
+        className="primary-button placement-cta"
         onClick={() => {
           preferences.setFocusLevel(selectedLevel);
           void trackAnalyticsEvent(token, {
@@ -92,7 +118,7 @@ export function PlacementScreen() {
           void navigate('/home');
         }}
       >
-        Продолжить с {selectedLevel}
+        Играть с уровнем {selectedLevel}
       </button>
     </main>
   );

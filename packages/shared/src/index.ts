@@ -11,6 +11,7 @@ export const launchLevels = ['A1', 'A2'] as const satisfies readonly CefrLevelId
 
 export const CLASSIC_RUN_BOARD_SIZE = 8;
 export const CLASSIC_RUN_TRAY_SIZE = 3;
+export const CLASSIC_RUN_OPTION_COUNT = 3;
 export const CLASSIC_RUN_DEFAULT_HEARTS = 5;
 export const CLASSIC_RUN_DEFAULT_SHORT_CYCLE_GAP = 5;
 export const CLASSIC_RUN_DEFAULT_SHORT_CYCLE_RECENT_WINDOW = 5;

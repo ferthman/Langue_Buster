@@ -27,7 +27,7 @@ The current Mini App frontend uses the Figma-exported prototype as the baseline 
 - keep gameplay and learning logic in domain packages, not React components;
 - replace risky clone-like puzzle assets with safer internal gradients, shapes, and effects;
 - keep Russian as the default product UI language;
-- keep the canonical run order: header, question card, board, tray;
+- keep the canonical run order: header, prompt, board, tray;
 - keep primary interaction as true drag-and-drop / touch-and-drop from tray to board.
 
 The current integrated foundation uses a deterministic short-cycle recovery queue for wrong answers and a shared classic-run config instead of UI hardcodes.
@@ -50,12 +50,12 @@ The app may take inspiration from the genre loop of board + pieces + line cleari
 
 The player sees:
 - an **8x8 board**;
-- **3 available blocks**;
-- a **question card** with 4 answer options;
+- **3 answer-piece slots**;
+- a **prompt card** with the source word at the top;
 - run HUD with score, hearts, streak, and other light feedback.
 
 To place a block, the player must answer correctly.
-Correct answer -> move becomes available.
+Correct tray choice -> that exact piece becomes draggable.
 Wrong answer -> player is penalized and the item is marked for faster repetition.
 
 This creates a loop where puzzle progress depends on language recall.
@@ -66,14 +66,14 @@ This creates a loop where puzzle progress depends on language recall.
 
 1. Player opens the Mini App inside Telegram.
 2. Player chooses a level or enters through the current progression flow.
-3. Run starts with an 8x8 board and 3 available blocks.
-4. A question card appears with a prompt and 4 answer options while the board stays visible.
-5. If the answer is correct, the move unlocks.
-6. The player drags one of the tray pieces directly onto the board.
+3. Run starts with an 8x8 board and 3 answer-piece slots in the tray.
+4. A prompt card appears with the source word while the board stays visible.
+5. Each tray slot combines one piece and one translation label.
+6. If the player taps the correct tray slot, that exact piece activates and becomes draggable.
 7. The board shows a live placement preview and resolves the drop immediately on release.
 8. Board resolves line clears, combo logic, score, and progression feedback.
 9. If the answer is wrong, the player loses a heart and the item goes into short-cycle recovery.
-10. When all 3 blocks are used, a new set of 3 blocks is generated.
+10. After a successful placement, a fresh set of 3 answer-piece slots is generated for the next prompt.
 11. Run continues until the player has no hearts left or no legal placements remain.
 12. End-of-run summary shows score, mistakes, weak words, mastery movement, and follow-up review signals.
 
@@ -83,13 +83,15 @@ This creates a loop where puzzle progress depends on language recall.
 
 ### Board and pieces
 - board size: **8x8**;
-- tray size: **3 pieces**;
-- new set appears after all 3 pieces are used;
+- tray size: **3 answer-piece slots**;
+- each slot pairs one piece with one answer option;
+- a fresh set appears after each successful placement;
 - placement must always be validated by deterministic game logic.
 
 ### Answer gating
 - every move in the main run is gated by a language prompt;
-- default answer format is **4 options with exactly 1 correct answer**;
+- run answer format is **3 tray options with exactly 1 correct answer**;
+- tapping the correct tray option unlocks only that piece for drag-and-drop;
 - card types evolve by level, but MVP and early v2 stay focused and readable.
 
 ### Failure conditions
@@ -280,9 +282,9 @@ Build a cleaner, warmer, more readable identity.
 
 ### Canonical run screen layout
 1. header with score, hearts, streak;
-2. question card;
+2. prompt card with the source word;
 3. board;
-4. tray with 3 pieces.
+4. tray with 3 answer-piece slots.
 
 ### Interaction rules
 - large tap targets;
@@ -437,7 +439,7 @@ Suggested core entities:
 ### v2.0 after MVP
 - 5-heart balancing pass;
 - explicit short-cycle repetition in-run;
-- stronger question card UX;
+- stronger prompt-and-tray answer UX;
 - daily and weekly mission layer;
 - richer mastery feedback;
 - content cleanup and scaling;

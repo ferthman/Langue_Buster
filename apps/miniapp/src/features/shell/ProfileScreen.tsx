@@ -74,7 +74,7 @@ export function ProfileScreen() {
         <ScreenHeader title="Учётная запись" caption="Реальные данные сессии" />
         <dl className="stats-list">
           <div>
-            <dt>Telegram ID</dt>
+            <dt>ID Telegram</dt>
             <dd>{auth.user.telegramUserId}</dd>
           </div>
           <div>

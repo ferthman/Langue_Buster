@@ -60,7 +60,7 @@ These are the main decisions this v2.0 plan assumes.
 
 ### 2.1 Core board loop stays
 - board remains **8x8**;
-- tray remains **3 pieces**;
+- tray remains **3 answer-piece slots**;
 - move unlocking still depends on correct answer;
 - game ends when hearts reach zero or no legal placements remain.
 
@@ -222,13 +222,14 @@ then the product still has a hole in it.
 **Goal:** improve the front-end interaction layer without changing the core identity.
 
 ### Tasks
-- [ ] Rebuild question card layout for maximum readability on mobile
-- [ ] Keep 4 large answer options as default
+- [ ] Rebuild the prompt-and-tray answer layout for maximum readability on mobile
+- [ ] Keep 3 large unified answer-piece tray slots as default
 - [ ] Test answer reveal timing:
   - [ ] instant feedback
   - [ ] 250-400 ms lock-state
   - [ ] fast transition into placement state
 - [ ] Improve drag interaction so question state is obvious before placement
+- [ ] Make correct tray selection visibly activate only the matching draggable piece
 - [ ] Add one-handed ergonomics pass for common Telegram screen heights
 - [ ] Tune font sizing and spacing for Russian source words and French options
 - [ ] Improve support for long phrases and article+noun tasks
@@ -241,7 +242,7 @@ then the product still has a hole in it.
 
 ### Deliverables
 - [ ] gameplay HUD v2 spec
-- [ ] question card component v2
+- [ ] prompt card + answer-piece tray component v2
 - [ ] motion timing tokens
 - [ ] interaction test checklist
 
@@ -555,7 +556,7 @@ That is just a premium way to buy yourself a debugging festival.
 2. implement gameplay config versioning
 3. implement 5-heart balancing support
 4. implement recovery queue engine and tests
-5. rebuild question card and answer flow UX
+5. rebuild prompt-and-tray answer flow UX
 6. add recap / retry mini-flow
 7. add mission engine and home screen progress widgets
 8. add content QA dashboards and high-failure item tooling
@@ -565,7 +566,7 @@ That is just a premium way to buy yourself a debugging festival.
 ### Example Codex tasks
 - [ ] Add gameplay config versioning with support for heart-count experiments and resurfacing interval experiments
 - [ ] Implement short-cycle mistake recovery queue in `packages/content-core` or equivalent learning domain package with tests
-- [ ] Refactor gameplay question card for mobile Telegram viewport without changing color palette
+- [ ] Refactor gameplay prompt card and answer-piece tray for mobile Telegram viewport without changing color palette
 - [ ] Add end-of-run weak-word recap component and API payload support
 - [ ] Build admin dashboard widget for high-failure vocabulary items using existing analytics events
 - [ ] Implement run-resume handling for Telegram reopen/background flows

@@ -106,15 +106,55 @@ describe('run service', () => {
       },
     });
 
+    const unlockedTrayIndex = getSelectedTrayIndex(trappedRun);
+
     const response = await context.runService.submitMove({
       runId: trappedRun.id,
       userId: context.user.id,
-      trayIndex: 0,
+      trayIndex: unlockedTrayIndex,
       origin: { x: 0, y: 0 },
     });
 
     expect(response.run.status).toBe('completed');
     expect(response.result?.status).toBe('completed');
+  });
+
+  it('only accepts the tray slot unlocked by the correct answer option', async () => {
+    const context = await createServiceContext({
+      contentRepository: createStableRunContentRepository(),
+    });
+    let run = await context.runService.startRun({
+      userId: context.user.id,
+      levelId: 'A1',
+      direction: 'ru_to_fr',
+    });
+
+    const correctOptionId = run.currentQuestionState?.question.correctOptionId;
+    if (!correctOptionId) {
+      throw new Error('Expected a correct option.');
+    }
+
+    const answerResponse = await context.runService.submitAnswer({
+      runId: run.id,
+      userId: context.user.id,
+      selectedOptionId: correctOptionId,
+      answeredAt: '2026-04-22T00:00:02.000Z',
+    });
+    run = answerResponse.run;
+
+    const unlockedTrayIndex = getSelectedTrayIndex(run);
+    const blockedTrayIndex = unlockedTrayIndex === 0 ? 1 : 0;
+
+    await expect(() =>
+      context.runService.submitMove({
+        runId: run.id,
+        userId: context.user.id,
+        trayIndex: blockedTrayIndex,
+        origin: { x: 0, y: 0 },
+      }),
+    ).rejects.toMatchObject({
+      code: 'run_invalid_move',
+    });
   });
 
   it('persists run results across repository re-instantiation', async () => {
@@ -274,6 +314,22 @@ function getWrongOptionId(run: RunSession): string {
   }
 
   return wrong.id;
+}
+
+function getSelectedTrayIndex(run: RunSession): number {
+  const questionState = run.currentQuestionState;
+  if (!questionState?.selectedOptionId) {
+    throw new Error('Expected selected option id on current question state.');
+  }
+
+  const selectedTrayIndex = questionState.question.options.findIndex(
+    (option) => option.id === questionState.selectedOptionId,
+  );
+  if (selectedTrayIndex === -1) {
+    throw new Error('Expected selected option to map to a tray index.');
+  }
+
+  return selectedTrayIndex;
 }
 
 function checkerboardFilledCoordinates(): readonly Coordinate[] {

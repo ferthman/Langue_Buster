@@ -425,16 +425,9 @@ export function applyPlacement(
   const nextCombo = calculateNextCombo(state.combo, state.lastClearCount, clearResult.clearedLineCount);
   const scoreBreakdown = calculateScoreBreakdown(piece, clearResult, nextCombo);
 
-  const nextTrayMutable = state.tray.slice() as [TraySlot, TraySlot, TraySlot];
-  nextTrayMutable[trayIndex] = null;
-
-  let nextTray: TrayState = nextTrayMutable;
-  let nextRng = state.rng;
-  if (nextTrayMutable.every((entry) => entry === null)) {
-    const generated = generateTray(state.rng);
-    nextTray = generated.tray;
-    nextRng = generated.rng;
-  }
+  const generated = generateTray(state.rng);
+  const nextTray: TrayState = generated.tray;
+  const nextRng = generated.rng;
 
   return {
     placedPiece,

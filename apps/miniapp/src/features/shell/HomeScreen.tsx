@@ -128,7 +128,7 @@ export function HomeScreen() {
   return (
     <main className="screen">
       <section className="hero-card">
-        <p className="eyebrow">Telegram Mini App</p>
+        <p className="eyebrow">Мини-приложение Telegram</p>
         <h1>Привет, {auth.user.firstName}</h1>
         <p className="body-copy">
           Сегодня фокус на уровне {focusLevel ?? 'A1'}: отвечайте правильно, открывайте ход и возвращайте слабые слова в повтор.
@@ -146,10 +146,13 @@ export function HomeScreen() {
         </div>
         <div className="stack">
           <button type="button" className="primary-button" onClick={() => { void handleStartRun(); }} disabled={starting}>
-            {starting ? 'Запускаем ран...' : 'Начать Classic Run'}
+            {starting ? 'Запускаем ран...' : 'Запустить ран'}
           </button>
           <button type="button" className="secondary-button" onClick={() => { void navigate('/review'); }}>
             Открыть повторение
+          </button>
+          <button type="button" className="secondary-button" onClick={() => { void navigate('/levels'); }}>
+            Сменить фокус уровня
           </button>
           {resumeRun ? (
             <button
@@ -167,7 +170,7 @@ export function HomeScreen() {
         <ScreenHeader title="На что смотреть" caption="Минимальный честный прогресс" />
         <ul className="feature-list">
           <li>Уровень запуска: {focusLevel ?? 'A1'}</li>
-          <li>Повторение берётся из реальной очереди Phase 8</li>
+          <li>Повторение берётся из реальной серверной очереди</li>
           <li>Ран использует серверное состояние без клиентской подмены</li>
         </ul>
       </section>

@@ -181,7 +181,7 @@ describe('clear logic', () => {
 });
 
 describe('apply flow, scoring, and combo logic', () => {
-  it('consumes tray slots, updates board immutably, and refills the tray only after all three pieces are used', () => {
+  it('updates board immutably and generates a fresh three-piece tray after each successful placement', () => {
     const initialState = createStateWithTray(
       createEmptyBoard(),
       ['single_1', 'single_1', 'single_1'],
@@ -191,16 +191,13 @@ describe('apply flow, scoring, and combo logic', () => {
     const first = applyPlacement(initialState, 0, { x: 0, y: 0 });
     expect(initialState.board.cells[0]).toBe('empty');
     expect(first.state.board.cells[0]).toBe('filled');
-    expect(first.state.tray[0]).toBeNull();
-    expect(first.state.tray[1]).not.toBeNull();
+    expect(first.state.tray.every((entry) => entry !== null)).toBe(true);
+    expect(first.state.rng.cursor).toBe(6);
     expect(first.state.score).toBe(1);
 
     const second = applyPlacement(first.state, 1, { x: 1, y: 0 });
-    expect(second.state.tray[1]).toBeNull();
-
-    const third = applyPlacement(second.state, 2, { x: 2, y: 0 });
-    expect(third.state.tray.every((entry) => entry !== null)).toBe(true);
-    expect(third.state.rng.cursor).toBe(6);
+    expect(second.state.tray.every((entry) => entry !== null)).toBe(true);
+    expect(second.state.rng.cursor).toBe(9);
   });
 
   it('scores a row clear with additive placement and clear bonuses', () => {

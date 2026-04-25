@@ -398,6 +398,20 @@ export function createRunService(dependencies: RunServiceDependencies) {
         throw new RunDomainError('run_invalid_move', `Tray slot ${input.trayIndex} does not contain an active piece.`);
       }
 
+      const selectedOptionIndex = questionState.question.options.findIndex(
+        (option) => option.id === questionState.selectedOptionId,
+      );
+      if (selectedOptionIndex === -1) {
+        throw new RunDomainError('run_invalid_state', 'Selected answer option could not be matched to a tray slot.');
+      }
+
+      if (input.trayIndex !== selectedOptionIndex) {
+        throw new RunDomainError(
+          'run_invalid_move',
+          `Tray slot ${input.trayIndex} is not unlocked for the selected answer. Expected slot ${selectedOptionIndex}.`,
+        );
+      }
+
       await dependencies.analytics?.recordEvent({
         eventName: 'move_submitted',
         source: 'backend',

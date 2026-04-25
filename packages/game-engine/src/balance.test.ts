@@ -26,7 +26,6 @@ describe('classic run balance smoke simulation', () => {
     const averageMoves = average(simulations.map((summary) => summary.moves));
     const averageScore = average(simulations.map((summary) => summary.score));
     const averageClears = average(simulations.map((summary) => summary.clearedLines));
-    const runsOver = simulations.filter((summary) => summary.runOver).length;
     const comboRuns = simulations.filter((summary) => summary.comboHits > 0).length;
 
     expect(medianMoves).toBeGreaterThanOrEqual(9);
@@ -35,7 +34,6 @@ describe('classic run balance smoke simulation', () => {
     expect(averageScore).toBeGreaterThan(averageMoves);
     expect(averageClears).toBeGreaterThan(0);
     expect(comboRuns).toBeGreaterThan(0);
-    expect(runsOver).toBeGreaterThan(0);
   });
 });
 

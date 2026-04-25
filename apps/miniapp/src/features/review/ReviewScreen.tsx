@@ -138,7 +138,7 @@ export function ReviewScreen() {
       <FullscreenState
         tone="loading"
         title="Готовим повторение"
-        description="Загружаем реальные карточки из очереди review."
+        description="Загружаем реальные карточки из очереди повторения."
       />
     );
   }
@@ -170,7 +170,7 @@ export function ReviewScreen() {
   return (
     <main className="screen">
       <section className="hero-card">
-        <p className="eyebrow">Review Queue</p>
+        <p className="eyebrow">Очередь повторения</p>
         <h1>Повторение</h1>
         <p className="body-copy">
           Карточка {index + 1} из {items.length}. Причина: {currentItem.reason}.
@@ -190,6 +190,7 @@ export function ReviewScreen() {
         question={currentQuestion}
         selectedOptionId={selectedOptionId}
         answerLocked={Boolean(feedback)}
+        lockedHint={feedback ? 'Ответ сохранён. Можно переходить к следующей карточке.' : undefined}
         pending={pending}
         onSelect={(option) => void handleAnswer(option.id)}
       />
